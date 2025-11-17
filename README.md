@@ -307,7 +307,7 @@ If you use MutPred-PPI in your research, please cite:
 ```bibtex
 @article{stewart2025mutpred-ppi,
   title={Predicting interaction-specific protein–protein interaction perturbations by missense variants with MutPred-PPI},
-  author={Stewart, Ross and Laval, Florent and Calderwood, Michael A and Vidal, Marc and Starita, Lea M and Fowler, Douglas M and Radivojac, Predrag},
+  author={Stewart, Ross and Laval, Florent and Calderwood, Michael A and Mort, Matthew and Cooper, David N and Vidal, Marc and Radivojac, Predrag},
   journal={[Journal TBD]},
   year={2025},
   doi={[DOI TBD]}
