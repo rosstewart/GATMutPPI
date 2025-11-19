@@ -62,7 +62,7 @@ python src/02_run_mutpred-ppi_inference.py working_dir/
 
 ## Data Availability
 
-Training and evaluation data is freely available on Zenodo: [https://doi.org/10.5281/zenodo.17409377](https://doi.org/10.5281/zenodo.17409377). Note that VarChAMP data was unpublished at the time of this repository release and thus excluded. AlphaFold3 structures and some variant data (COSMIC, HGMD) are not included due to licensing restrictions and must be obtained from their respective sources.
+Training and evaluation data is freely available on Zenodo: [https://doi.org/10.5281/zenodo.17645488](https://doi.org/10.5281/zenodo.17645488). Note that VarChAMP data was unpublished at the time of this repository release and thus excluded. AlphaFold3 structures and some variant data (COSMIC, HGMD) are not included due to licensing restrictions and must be obtained from their respective sources.
 
 ## Detailed Usage
 
