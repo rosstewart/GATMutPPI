@@ -61,6 +61,8 @@ def get_labeled_residues(variant_file):
     
     with open(variant_file, 'r') as f:
         for line in f:
+            if len(line.strip()) == 0:
+                continue
             id_a, variant, id_b = line.strip().split('\t')
             n_variant_partner_interactions += 1
             
@@ -103,6 +105,14 @@ def find_mmcif_file(id_a, id_b, mmcif_dir):
                 (f"{id_a.lower()}_{id_b}", False),
                 (f"{id_b}_{id_a.lower()}", True),
                 (f"{id_b.lower()}_{id_a}", True)
+                (f"{id_a}-{id_b}", False),
+                (f"{id_b}-{id_a}", True),
+                (f"{id_a.lower()}-{id_b.lower()}", False),
+                (f"{id_b.lower()}-{id_a.lower()}", True),
+                (f"{id_a}-{id_b.lower()}", False),
+                (f"{id_a.lower()}-{id_b}", False),
+                (f"{id_b}-{id_a.lower()}", True),
+                (f"{id_b.lower()}-{id_a}", True
             ]
             
             for id_pattern, swapped in id_combinations:
