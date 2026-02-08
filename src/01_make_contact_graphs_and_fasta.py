@@ -112,7 +112,7 @@ def find_mmcif_file(id_a, id_b, mmcif_dir):
                 (f"{id_a}-{id_b.lower()}", False),
                 (f"{id_a.lower()}-{id_b}", False),
                 (f"{id_b}-{id_a.lower()}", True),
-                (f"{id_b.lower()}-{id_a}", True
+                (f"{id_b.lower()}-{id_a}", True)
             ]
             
             for id_pattern, swapped in id_combinations:
