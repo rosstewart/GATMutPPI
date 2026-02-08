@@ -104,7 +104,7 @@ def find_mmcif_file(id_a, id_b, mmcif_dir):
                 (f"{id_a}_{id_b.lower()}", False),
                 (f"{id_a.lower()}_{id_b}", False),
                 (f"{id_b}_{id_a.lower()}", True),
-                (f"{id_b.lower()}_{id_a}", True)
+                (f"{id_b.lower()}_{id_a}", True),
                 (f"{id_a}-{id_b}", False),
                 (f"{id_b}-{id_a}", True),
                 (f"{id_a.lower()}-{id_b.lower()}", False),
