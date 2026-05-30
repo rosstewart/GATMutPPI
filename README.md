@@ -1,6 +1,14 @@
 # MutPred-PPI
 
-Official repository for "Predicting interaction-specific protein–protein interaction perturbations by missense variants with MutPred-PPI"
+Official repository for "Predicting interaction-specific protein–protein interaction perturbations by missense variants with MutPred-PPI", published in RECOMB 2026.
+
+## Paper Links
+
+- **RECOMB 2026 Proceedings**  
+  https://recomb.org/proceedings/proceedings/2030-2026/2026/
+
+- **PDF link**  
+  https://doi.org/10.64898/2025.12.20.695738
 
 ## Overview
 
@@ -305,12 +313,13 @@ This software is licensed under the MIT License. See the [LICENSE](LICENSE) file
 If you use MutPred-PPI in your research, please cite:
 
 ```bibtex
-@article{stewart2025mutpred-ppi,
-  title={Predicting interaction-specific protein–protein interaction perturbations by missense variants with MutPred-PPI},
-  author={Stewart, Ross and Laval, Florent and Calderwood, Michael A and Mort, Matthew and Cooper, David N and Vidal, Marc and Radivojac, Predrag},
-  journal={[Journal TBD]},
-  year={2025},
-  doi={[DOI TBD]}
+@inproceedings{stewart2026mutpred-ppi,
+  title={Predicting interaction-specific protein--protein interaction perturbations by missense variants with MutPred-PPI},
+  author={Stewart, Ross and Laval, Florent and Coppin, Georges and Spirohn-Fitzgerald, Kerstin and Tixhon, Maxime and Hao, Tong and Calderwood, Michael A and Mort, Matthew and Cooper, David N and Vidal, Marc and Radivojac, Predrag},
+  booktitle={Proceedings of the 30th Annual International Conference on Research in Computational Molecular Biology (RECOMB)},
+  year={2026},
+  note={Also available as bioRxiv preprint (2025.12.20.695738)},
+  doi={10.64898/2025.12.20.695738}
 }
 ```
 
