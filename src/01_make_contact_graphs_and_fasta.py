@@ -17,6 +17,7 @@ import argparse
 import numpy as np
 import scipy.sparse as sp
 from scipy.io import savemat, loadmat
+from scipy.spatial import cKDTree
 from Bio import PDB
 from Bio.PDB import MMCIFParser
 from joblib import Parallel, delayed
@@ -192,22 +193,28 @@ def make_graph(complex_id, mmcif_dir, save_dir):
             coords.append(atom_coords)
     
     num_residues = len(aa_labels)
-    
-    # build contact matrix
+
+    # Build a flat array of all atom coordinates with residue index labels,
+    # then use a KD-tree to find all atom pairs within EDGE_DIST_THRESHOLD.
+    # This replaces the O(N^2 * A^2) nested loop with an O(N*A * log(N*A)) query
+    # and produces identical results (same threshold, same distance metric).
+    flat_coords = []
+    atom_to_res = []
+    for res_idx, atom_dict in enumerate(coords):
+        for atom_coord in atom_dict.values():
+            flat_coords.append(atom_coord)
+            atom_to_res.append(res_idx)
+
     edge_mat = np.zeros((num_residues, num_residues))
-    
-    for i in range(num_residues):
-        for j in range(i + 1, num_residues):
-            if coords[i] and coords[j]:
-                # check for close atom pairs
-                for atom_i in coords[i]:
-                    for atom_j in coords[j]:
-                        dist = np.linalg.norm(coords[i][atom_i] - coords[j][atom_j])
-                        if dist <= EDGE_DIST_THRESHOLD:
-                            edge_mat[i, j] = edge_mat[j, i] = 1
-                            break
-                    if edge_mat[i, j]:
-                        break
+    if flat_coords:
+        flat_coords = np.array(flat_coords)
+        atom_to_res = np.array(atom_to_res)
+        tree = cKDTree(flat_coords)
+        close_pairs = tree.query_pairs(EDGE_DIST_THRESHOLD)
+        for ai, aj in close_pairs:
+            ri, rj = atom_to_res[ai], atom_to_res[aj]
+            if ri != rj:
+                edge_mat[ri, rj] = edge_mat[rj, ri] = 1
     
     # save graph data
     savemat(out_file, {
