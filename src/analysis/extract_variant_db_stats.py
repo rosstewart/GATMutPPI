@@ -1,0 +1,222 @@
+#!/usr/bin/env python3
+"""Compute S-Table 1 (variant repository statistics) for MutPred-PPI paper.
+
+Reads actual prediction TSVs and classification source files to compute
+per-group statistics: Proteins, Pairs, Variants, Triplets, Mean Partners.
+
+Writes figures/variant_db_stats_table.tex as a drop-in tabular block.
+"""
+import os, pickle
+from pathlib import Path
+from collections import defaultdict
+import pandas as pd
+
+_PUB  = Path("/data/ross/ppi_lossgain/interaction_loss/publication")
+_BASE = Path("/data/ross/ppi_lossgain/interaction_loss")
+_HOME = _BASE / "home"
+_OUT  = _PUB / "figures" / "variant_db_stats_table.tex"
+
+PRED_DIR = _PUB / "results_revisions" / "variant_dbs_sfvfp"
+
+# Classification source files
+CLINVAR_SUBSETS = {
+    "pathogenic": _HOME / "clinvar" / "pathogenic_dirbind_variant_subset.pkl",
+    "benign":     _HOME / "clinvar" / "benign_dirbind_variant_subset.pkl",
+    "vus":        _HOME / "clinvar" / "vus_dirbind_variant_subset.pkl",
+}
+BENIGN_AF_FILE = Path("/data/ross/clinvar/benign_allele_frequencies.tsv")
+RARE_BENIGN_THRESHOLD = 0.01
+
+GNOMAD_AF_FILE   = _BASE / "gnomad" / "gnomad_allele_frequencies.tsv"
+VT_TO_TUMOR_SITE = _BASE / "cosmic" / "vt_to_tumor_site.pkl"
+ONCO_TSG_FILE    = _BASE / "cosmic_mutations" / "onco_tsg_dict.pkl"
+AUTISM_SUBSET    = _HOME / "autism" / "variant_subset.pkl"
+NEURODEV_LABELS  = _HOME / "autism" / "variant_label_dict.pkl"
+
+
+def parse_preds(tsv_path) -> pd.DataFrame:
+    """Load predictions TSV; parse complex_id into interactor/partner."""
+    df = pd.read_csv(tsv_path, sep="\t")
+    df[["interactor", "partner"]] = df["complex_id"].str.split("_", n=1, expand=True)
+    return df
+
+
+def stats(df: pd.DataFrame, subset=None) -> dict:
+    """Compute Proteins/Pairs/Variants/Triplets/MeanPartners for a filtered df.
+
+    subset: optional set of (interactor, variant, partner) tuples to filter to.
+    """
+    if subset is not None:
+        mask = df.apply(lambda r: (r.interactor, r.variant, r.partner) in subset, axis=1)
+        df = df[mask]
+    if len(df) == 0:
+        return dict(proteins=0, pairs=0, variants=0, triplets=0, mean_partners=0.0)
+    n_proteins = df["interactor"].nunique()
+    n_pairs    = df.groupby(["interactor", "partner"]).ngroups
+    n_variants = df.groupby(["interactor", "variant"]).ngroups
+    n_triplets = len(df)
+    mean_partners = df.groupby(["interactor", "variant"])["partner"].count().mean()
+    return dict(proteins=n_proteins, pairs=n_pairs, variants=n_variants,
+                triplets=n_triplets, mean_partners=round(mean_partners, 1))
+
+
+def fmt(n, decimals=None) -> str:
+    if n is None or (isinstance(n, float) and n != n):
+        return r"-"
+    if decimals is not None:
+        return f"{n:.{decimals}f}"
+    return f"{int(n):,}".replace(",", "{,}")
+
+
+def row(label: str, s: dict) -> str:
+    return (rf"\quad {label} & {fmt(s['proteins'])} & {fmt(s['pairs'])} & "
+            rf"{fmt(s['variants'])} & {fmt(s['triplets'])} & {fmt(s['mean_partners'], 1)} \\")
+
+
+def main() -> None:
+    lines = [
+        r"\begin{tabular}{lrrrrr}",
+        r"\hline",
+        (r"\textbf{Dataset} & \textbf{Proteins} & \textbf{Pairs} & "
+         r"\textbf{Variants} & \textbf{Triplets} & \textbf{Mean Partners} \\"),
+        r"\hline",
+    ]
+
+    # ── ClinVar ──────────────────────────────────────────────────────────────
+    print("Processing ClinVar...", flush=True)
+    cv_df = parse_preds(PRED_DIR / "clinvar_mutpred_ppi_predictions.tsv")
+    subsets = {k: pickle.load(open(v, "rb")) for k, v in CLINVAR_SUBSETS.items()}
+    rare_benign_set = set()
+    if BENIGN_AF_FILE.exists():
+        af = {}
+        with open(BENIGN_AF_FILE) as f:
+            for ln in f:
+                parts = ln.strip().split("\t")
+                if len(parts) >= 2:
+                    af[parts[0]] = float(parts[1])
+        for (u, v, p) in subsets["benign"]:
+            if af.get(f"{u} {v}", 1.0) <= RARE_BENIGN_THRESHOLD:
+                rare_benign_set.add((u, v, p))
+    else:
+        print("  WARNING: benign AF file not found — rare_benign empty", flush=True)
+
+    lines += [r"\multicolumn{6}{l}{\textit{ClinVar}} \\"]
+    lines.append(row("Rare Benign",  stats(cv_df, rare_benign_set)))
+    lines.append(row("Benign",       stats(cv_df, subsets["benign"])))
+    lines.append(row("Pathogenic",   stats(cv_df, subsets["pathogenic"])))
+    lines.append(row("VUS",          stats(cv_df, subsets["vus"])))
+    lines.append(r"\hline")
+
+    # ── COSMIC ───────────────────────────────────────────────────────────────
+    print("Processing COSMIC...", flush=True)
+    cos_df = parse_preds(PRED_DIR / "cosmic_mutpred_ppi_predictions.tsv")
+    vt_to_sites = pickle.load(open(VT_TO_TUMOR_SITE, "rb"))
+    onco_tsg    = pickle.load(open(ONCO_TSG_FILE, "rb"))
+    onco_vts    = onco_tsg["oncogene"]
+    tsg_vts     = onco_tsg["TSG"]
+
+    def recurrence(r) -> int:
+        return len(vt_to_sites.get(f"{r.interactor} {r.variant}", []))
+
+    cos_df = cos_df.copy()
+    cos_df["recurrence"] = cos_df.apply(recurrence, axis=1)
+    cos_df["is_onco"]    = cos_df.apply(lambda r: f"{r.interactor} {r.variant}" in onco_vts, axis=1)
+    cos_df["is_tsg"]     = cos_df.apply(lambda r: f"{r.interactor} {r.variant}" in tsg_vts, axis=1)
+
+    thresholds = [1, 2, 4, 8, 16, 32]
+    labels_rec = ["Single-occurrence", r"Recurrence $\geq$ 2", r"Recurrence $\geq$ 4",
+                  r"Recurrence $\geq$ 8", r"Recurrence $\geq$ 16", r"Recurrence $\geq$ 32"]
+
+    lines += [r"\multicolumn{6}{l}{\textit{COSMIC}} \\"]
+    for thr, lbl in zip(thresholds, labels_rec):
+        sub = cos_df[cos_df["recurrence"] == thr] if thr == 1 else cos_df[cos_df["recurrence"] >= thr]
+        lines.append(row(lbl, stats(sub)))
+    lines.append(r"\hline")
+
+    lines += [r"\multicolumn{6}{l}{\textit{COSMIC (Oncogenes)}} \\"]
+    onco_df = cos_df[cos_df["is_onco"]]
+    for thr, lbl in zip(thresholds, labels_rec):
+        sub = onco_df[onco_df["recurrence"] == thr] if thr == 1 else onco_df[onco_df["recurrence"] >= thr]
+        lines.append(row(lbl, stats(sub)))
+    lines.append(r"\hline")
+
+    lines += [r"\multicolumn{6}{l}{\textit{COSMIC (Tumor Suppressor Genes)}} \\"]
+    tsg_df = cos_df[cos_df["is_tsg"]]
+    for thr, lbl in zip(thresholds, labels_rec):
+        sub = tsg_df[tsg_df["recurrence"] == thr] if thr == 1 else tsg_df[tsg_df["recurrence"] >= thr]
+        lines.append(row(lbl, stats(sub)))
+    lines.append(r"\hline")
+
+    # ── HGMD ─────────────────────────────────────────────────────────────────
+    print("Processing HGMD...", flush=True)
+    hgmd_tsv = PRED_DIR / "hgmd_mutpred_ppi_predictions.tsv"
+    if hgmd_tsv.exists():
+        hgmd_df = parse_preds(hgmd_tsv)
+        lines += [r"\multicolumn{6}{l}{\textit{HGMD}} \\"]
+        lines.append(row("All", stats(hgmd_df)))
+        lines.append(r"\hline")
+
+    # ── gnomAD ────────────────────────────────────────────────────────────────
+    print("Processing gnomAD...", flush=True)
+    gn_df = parse_preds(PRED_DIR / "gnomad_mutpred_ppi_predictions.tsv")
+    af_dict = {}
+    with open(GNOMAD_AF_FILE) as f:
+        for ln in f:
+            parts = ln.strip().split("\t")
+            if len(parts) >= 2:
+                af_dict[parts[0]] = float(parts[1])
+    gn_df = gn_df.copy()
+    gn_df["af"] = gn_df.apply(lambda r: af_dict.get(f"{r.interactor} {r.variant}", None), axis=1)
+
+    lines += [r"\multicolumn{6}{l}{\textit{gnomAD}} \\"]
+    lines.append(row("All", stats(gn_df)))
+    gn_af = gn_df.dropna(subset=["af"])
+    bins = [(None, 1e-6), (1e-6, 1e-5), (1e-5, 1e-4), (1e-4, 1e-3), (1e-3, 1e-2), (1e-2, None)]
+    bin_labels = [
+        r"AF $\leq$ 1e-6",
+        r"1e-6 $<$ AF $\leq$ 1e-5",
+        r"1e-5 $<$ AF $\leq$ 1e-4",
+        r"1e-4 $<$ AF $\leq$ 1e-3",
+        r"1e-3 $<$ AF $\leq$ 1e-2",
+        r"1e-2 $<$ AF",
+    ]
+    for (lo, hi), lbl in zip(bins, bin_labels):
+        if lo is None:
+            sub = gn_af[gn_af["af"] <= hi]
+        elif hi is None:
+            sub = gn_af[gn_af["af"] > lo]
+        else:
+            sub = gn_af[(gn_af["af"] > lo) & (gn_af["af"] <= hi)]
+        lines.append(row(lbl, stats(sub)))
+    lines.append(r"\hline")
+
+    # ── NDD & ASD ─────────────────────────────────────────────────────────────
+    print("Processing NDD / ASD...", flush=True)
+    ndd_df = parse_preds(PRED_DIR / "autism_mutpred_ppi_predictions.tsv")
+    label_dict = pickle.load(open(NEURODEV_LABELS, "rb"))
+    ndd_case_set, ndd_ctrl_set = set(), set()
+    for (u, v, p) in ndd_df.apply(
+            lambda r: (r.interactor, r.variant, r.partner), axis=1):
+        key = f"{u} {v}"
+        if key in label_dict:
+            (ndd_case_set if label_dict[key] == 1 else ndd_ctrl_set).add((u, v, p))
+
+    lines += [r"\multicolumn{6}{l}{\textit{Neurodevelopmental Disorders}} \\"]
+    lines.append(row("Case",    stats(ndd_df, ndd_case_set)))
+    lines.append(row("Control", stats(ndd_df, ndd_ctrl_set)))
+    lines.append(r"\hline")
+
+    asd_subset = pickle.load(open(AUTISM_SUBSET, "rb"))
+    lines += [r"\multicolumn{6}{l}{\textit{Autism Spectrum Disorder}} \\"]
+    lines.append(row("Case", stats(ndd_df, asd_subset)))
+    lines.append(r"\hline")
+
+    lines.append(r"\end{tabular}")
+
+    _OUT.parent.mkdir(parents=True, exist_ok=True)
+    _OUT.write_text("\n".join(lines) + "\n")
+    print(f"Wrote → {_OUT}")
+
+
+if __name__ == "__main__":
+    main()

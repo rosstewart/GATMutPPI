@@ -42,7 +42,7 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 # pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
 # Install remaining dependencies
-pip install -r src/requirements.txt
+pip install -r src/inference/requirements.txt
 ```
 
 ### System Requirements
@@ -57,20 +57,24 @@ pip install -r src/requirements.txt
 
 ```bash
 # Step 1: Prepare AlphaFold3 inputs (if using AlphaFold3)
-python src/00_make_af3_input_files.py proteins.fasta variants.tsv af3_inputs/
+python src/inference/00_make_af3_json_input.py proteins.fasta variants.tsv af3_inputs/
 
 # Step 2: Obtain protein complex structures (see Step 1.5 below)
 
 # Step 3: Generate contact graphs
-python src/01_make_contact_graphs_and_fasta.py working_dir/ mmcif_dir/ variants.tsv
+python src/inference/01_make_contact_graphs_and_fasta.py working_dir/ mmcif_dir/ variants.tsv
 
 # Step 4: Run predictions
-python src/02_run_mutpred-ppi_inference.py working_dir/
+python src/inference/02_run_mutpred-ppi_inference.py working_dir/
 ```
 
 ## Data Availability
 
-Training and evaluation data is freely available on Zenodo: [https://doi.org/10.5281/zenodo.17645488](https://doi.org/10.5281/zenodo.17645488). Note that VarChAMP data was unpublished at the time of this repository release and thus excluded. AlphaFold3 structures and some variant data (COSMIC, HGMD) are not included due to licensing restrictions and must be obtained from their respective sources.
+Pre-trained model weights, Sahni+Fragoza training data (post-AF3 structure filtering, as used in Fig 3 GCV), and AF3 complex structures are available on Zenodo:
+- **Models + training data**: https://doi.org/10.5281/zenodo.17645488
+- **AF3 structures**: https://doi.org/10.5281/zenodo.18701748
+
+VarChAMP data was unpublished IGVF consortium data at time of release and is excluded. COSMIC and HGMD require licensed access and are not distributed. gnomAD and ClinVar data must be downloaded from their respective public portals.
 
 ## Detailed Usage
 
@@ -79,7 +83,7 @@ Training and evaluation data is freely available on Zenodo: [https://doi.org/10.
 If using AlphaFold3 for structure generation, prepare JSON files for submission:
 
 ```bash
-python src/00_make_af3_json_input.py \
+python src/inference/00_make_af3_json_input.py \
     <fasta_file> \
     <triplet_tsv> \
     <output_directory> \
@@ -131,7 +135,7 @@ Save all mmCIF structure files to `<mmcif_dir>` for use in Step 2. **Important:*
 Process structures to create residue contact graphs:
 
 ```bash
-python src/01_make_contact_graphs_and_fasta.py \
+python src/inference/01_make_contact_graphs_and_fasta.py \
     <working_dir> \
     <mmcif_dir> \
     <variants_file> \
@@ -153,7 +157,7 @@ python src/01_make_contact_graphs_and_fasta.py \
 Predict interaction disruption for all variants:
 
 ```bash
-python src/02_run_mutpred-ppi_inference.py \
+python src/inference/02_run_mutpred-ppi_inference.py \
     <working_dir> \
     [--device DEVICE]
 ```
@@ -184,7 +188,7 @@ The pipeline accepts mmCIF files with flexible naming:
 
 ## Example Workflow
 
-A complete minimal example using 10 test variants is provided in `src/example/`.
+A complete minimal example using 10 test variants is provided in `example/`.
 
 **Note:** Example AlphaFold3 structures are subject to AlphaFold 3 Output Terms of Use and provided for non-commercial research only. See: https://github.com/google-deepmind/alphafold3/blob/main/WEIGHTS_TERMS_OF_USE.md
 
@@ -192,11 +196,8 @@ A complete minimal example using 10 test variants is provided in `src/example/`.
 # Activate conda environment (if using conda)
 conda activate mutpred-ppi
 
-# Navigate to the src/ directory
-cd src/
-
 # 1. Generate AlphaFold3 inputs (if using AlphaFold3)
-python 00_make_af3_json_input.py \
+python src/inference/00_make_af3_json_input.py \
     example/test_proteins.fasta \
     example/test_variants.tsv \
     example/
@@ -205,14 +206,14 @@ python 00_make_af3_json_input.py \
 # Example structure: example/af3_models/fold_o00548_p46531_model_0.cif
 
 # 2. Process structures to generate contact graphs
-python 01_make_contact_graphs_and_fasta.py \
+python src/inference/01_make_contact_graphs_and_fasta.py \
     example/ \
     example/af3_models/ \
     example/test_variants.tsv \
     1  # Limit to 1 parallel job
 
 # 3. Run predictions
-python 02_run_mutpred-ppi_inference.py \
+python src/inference/02_run_mutpred-ppi_inference.py \
     example/ \
     --device cuda:0
 
@@ -232,20 +233,194 @@ O00548_P46531	N34I	0.35405662655830383
 ## Project Structure
 
 ```
-mutpred-ppi/
+MutPred-PPI/
 ├── src/
-│   ├── 00_make_af3_json_input.py       # AlphaFold3 input preparation
-│   ├── 01_make_contact_graphs_and_fasta.py  # Contact graph generation
-│   ├── 02_run_mutpred-ppi_inference.py    # Model inference
-│   ├── utils/
-│   │   ├── inference_utils.py           # Core inference functions
-│   │   ├── model_loader.py              # Model loading utilities
-│   │   └── prott5_loader.py             # ProtT5 embedding generation
-│   ├── models/                          # Pre-trained model weights
-│   ├── example/                         # Example data and workflow
-│   └── requirements.txt                 # Python dependencies
-├── LICENSE                               # MIT License
+│   ├── inference/                       # Public 3-step inference pipeline
+│   │   ├── 00_make_af3_json_input.py
+│   │   ├── 01_make_contact_graphs_and_fasta.py
+│   │   ├── 02_run_mutpred-ppi_inference.py
+│   │   ├── requirements.txt
+│   │   └── utils/
+│   ├── training/                        # Model training scripts
+│   │   ├── preprocess_stability_data.py # Preprocess MegaScale data for pretraining
+│   │   ├── pretrain_stability.py        # MegaScale stability pretraining
+│   │   └── train_final_model.py         # Final PPI model training
+│   ├── evaluation/                      # Cross-validation benchmarking
+│   │   ├── mutpred_ppi_cv.py            # MutPred-PPI grouped cross-validation
+│   │   ├── esignet_cv.py
+│   │   ├── mint_cv.py
+│   │   ├── pplm_cv.py
+│   │   ├── swing_cv.py
+│   │   └── saambe3d_cv.py
+│   ├── data_processing/                 # Dataset preparation
+│   │   ├── training_sets/
+│   │   └── variant_databases/           # map_gnomad.py, map_cosmic.py, etc.
+│   ├── variant_db_inference/            # Large-scale variant DB scoring
+│   │   ├── precompute_prott5.py
+│   │   └── run_variant_db_inference.py
+│   └── analysis/                        # Figure generation + paper analyses
+│       ├── roc_plots.py
+│       ├── variant_db_charts.py
+│       ├── varchamp_blind_test.py
+│       └── ...
+├── figures/                             # LaTeX table outputs (generated)
+│   ├── training_data_table.tex
+│   └── variant_db_stats_table.tex
+├── example/                             # Minimal worked example inputs
+│   ├── test_proteins.fasta
+│   └── test_variants.tsv
+├── LICENSE
 └── README.md
+```
+
+Model weights and training data are distributed via Zenodo (see [Data Availability](#data-availability) above).
+
+## Reproducing Paper Results
+
+### Downloads
+
+Download model weights and training data from Zenodo before proceeding:
+- **Model weights**: `model_weights/` directory (see Zenodo)
+- **Training data**: `datasets/sahni_fragoza_training_data.csv`, `datasets/sahni_training_data.csv`
+- **AF3 structures** (for training graph regeneration): see the AF3 structures Zenodo entry
+
+### External Path Prerequisites
+
+The training and evaluation scripts contain hardcoded absolute paths that must exist on your machine. Update these constants if running on a different system:
+
+| Constant | File | Default path |
+|----------|------|-------------|
+| `_CV_DIR` | `src/evaluation/mutpred_ppi_cv.py` | `/home/rcstewart/gnn/ppi_interaction_loss/cv_splits` |
+| `_MEGASCALE_PRETRAINED_PATH` | `src/evaluation/mutpred_ppi_cv.py` | `/data/ross/gnn/jose_2016_lossgain_models/gnn_prott5_megascale_pretrain.pt` |
+| `_MEGASCALE_SCALER_PATH` | `src/evaluation/mutpred_ppi_cv.py` | `/data/ross/ppi_lossgain/interaction_loss/megascale_preprocessed/mutation_diff_scaler.pkl` |
+| MINT cache | `src/evaluation/precompute_mint_embeddings.py` | `/data/ross/ppi_lossgain/interaction_loss/nm_revisions/mint_cache.pkl` |
+| PPLM cache | `src/evaluation/precompute_pplm_embeddings.py` | `/data/ross/ppi_lossgain/interaction_loss/nm_revisions/pplm_cache.pkl` |
+
+### Phase 0: MegaScale Stability Pretraining
+
+This is required once before any model training. Source data from [Tsuboyama et al. 2023](https://doi.org/10.1038/s41586-023-06328-6).
+
+```bash
+# Preprocess MegaScale CSV + AlphaFold PDBs into training tensors
+conda run -n ppi python src/training/preprocess_stability_data.py \
+    --csv     /path/to/Tsuboyama2023_Dataset2_Dataset3_20230416.csv \
+    --pdb-dir /path/to/AlphaFold_model_PDBs/ \
+    --splits  /path/to/mega_splits.pkl \
+    --outdir  /path/to/megascale_preprocessed/ \
+    --device  cuda:0 --n-jobs 16
+# Outputs: preprocessed.pkl, mutation_diff_scaler.pkl
+
+# Pretrain GNN on stability data
+conda run -n ppi python src/training/pretrain_stability.py \
+    --data     /path/to/megascale_preprocessed/preprocessed.pkl \
+    --scaler   /path/to/megascale_preprocessed/mutation_diff_scaler.pkl \
+    --outmodel /path/to/gnn_prott5_megascale_pretrain.pt \
+    --device   cuda:0
+```
+
+Update `_MEGASCALE_PRETRAINED_PATH` in `src/evaluation/mutpred_ppi_cv.py` to point to the output checkpoint.
+
+### Phase 1: Training Data Preparation
+
+Contact graphs (`.mat` files) are derived from AF3 structures and are not distributed directly. Generate them using:
+
+```bash
+# For each protein pair, generate contact graph from AF3 mmCIF
+conda run -n ppi python src/inference/01_make_contact_graphs_and_fasta.py \
+    working_dir/ af3_structures/ variants.tsv
+```
+
+CV splits (fold assignments) are pre-computed and stored in `_CV_DIR`. These define the 30-seed grouped cross-validation used for all Fig 3 benchmarking.
+
+### Phase 2: Model Training
+
+```bash
+# Train Sahni+Fragoza model (primary, Fig 3)
+conda run -n ppi python src/training/train_final_model.py \
+    --dataset sahni_fragoza --ablation megascale_all \
+    --device cuda:0
+
+# Train Sahni+Fragoza+VarChAMP model (full-data, Fig 4 / VarChAMP blind test)
+conda run -n ppi python src/training/train_final_model.py \
+    --dataset sahni_fragoza_varchamp_full_pooled --ablation megascale_all \
+    --device cuda:0
+```
+
+### Phase 3: Grouped Cross-Validation (Fig 3, S1)
+
+```bash
+# MutPred-PPI GCV (30 seeds, Sahni+Fragoza dataset)
+conda run -n ppi python src/evaluation/mutpred_ppi_cv.py \
+    --dataset sahni_fragoza --ablation megascale_all \
+    --device cuda:0
+
+# Comparator methods (require external installations)
+conda run -n ppi python src/evaluation/swing_cv.py    --dataset sahni_fragoza
+conda run -n ppi python src/evaluation/esignet_cv.py  --dataset sahni_fragoza
+conda run -n ppi python src/evaluation/mint_cv.py     --dataset sahni_fragoza
+conda run -n ppi python src/evaluation/pplm_cv.py     --dataset sahni_fragoza
+conda run -n ppi python src/evaluation/saambe3d_cv.py --dataset sahni_fragoza
+```
+
+Intermediate MINT/PPLM/eSIG-Net sequence embeddings must be precomputed first:
+
+```bash
+conda run -n ppi python src/evaluation/precompute_mint_embeddings.py
+conda run -n ppi python src/evaluation/precompute_pplm_embeddings.py
+# eSIG-Net: use eSIG-Net's own precompute script (see its repository)
+```
+
+### Phase 4: VarChAMP Blind Test (Fig 4)
+
+```bash
+# Run blind test for each method (saves per-class npy arrays)
+conda run -n ppi python src/evaluation/mutpred_ppi_cv.py \
+    --dataset sahni_fragoza_varchamp_full_pooled ...
+
+# Enforce consistent test-set membership across methods
+conda run -n ppi python src/analysis/restratify_vcfp_blind_test.py
+
+# Generate Fig 4 from per-class arrays
+conda run -n ppi python src/analysis/varchamp_blind_test.py
+```
+
+### Phase 5: Variant Database Inference (Fig 5–7)
+
+ProtT5 embeddings must be precomputed before inference (large, resume-safe):
+
+```bash
+nohup conda run -n ppi python src/variant_db_inference/precompute_prott5.py \
+    --fasta /path/to/gnomad_wt_and_vt.fasta --out prott5_embeddings.h5 \
+    --device cuda:0 > precompute.log 2>&1 &
+
+conda run -n ppi python src/variant_db_inference/run_variant_db_inference.py \
+    --dataset gnomad --device cuda:0
+```
+
+**Note:** HGMD and COSMIC datasets require licensed access. COSMIC can be enabled with `--include-cosmic`. HGMD is excluded from all distributed files.
+
+### Phase 6: Variant DB Classification and Chart Generation
+
+```bash
+conda run -n ppi python src/analysis/classify_variant_dbs.py
+conda run -n ppi python src/analysis/variant_db_charts.py
+```
+
+### Phase 7: Table Generation
+
+```bash
+# Training data statistics table (figures/training_data_table.tex)
+conda run -n ppi python src/analysis/generate_training_table.py
+
+# Variant repository statistics table (figures/variant_db_stats_table.tex)
+conda run -n ppi python src/analysis/extract_variant_db_stats.py
+```
+
+### Phase 8: ROC/AUC Figures
+
+```bash
+conda run -n ppi python src/analysis/roc_plots.py
+conda run -n ppi python src/analysis/protein_class_stratification.py
 ```
 
 ## Performance
@@ -260,10 +435,10 @@ mutpred-ppi/
 **CUDA out of memory error:**
 ```bash
 # Use CPU instead
-python src/02_run_mutpred-ppi_inference.py working_dir/ --device cpu
+python src/inference/02_run_mutpred-ppi_inference.py working_dir/ --device cpu
 
 # Or use a different GPU
-python src/02_run_mutpred-ppi_inference.py working_dir/ --device cuda:1
+python src/inference/02_run_mutpred-ppi_inference.py working_dir/ --device cuda:1
 ```
 
 **Missing structures:**
