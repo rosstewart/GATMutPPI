@@ -153,17 +153,28 @@ def main() -> None:
 
     print("Loading SFVCFP pkl...", flush=True)
     sfvcfp_struct = stats_from_pkl(_SFVCFP_PKL)
-    # dis/non: SFVC1p part exact + pooled estimated from CSV disruption rate
+    # VarChAMP triplets = SFVCFP total minus SF entries (the complex label-file
+    # subtraction above overcounts due to overlapping label files).
+    # dis/non for VarChAMP: derive by subtracting SF totals from SFVCFP estimates.
     sfvc1p_all_stats = stats_from_rows(sfvc1p_rows)
-    n_extra_pooled = sfvcfp_struct["triplets"] - sfvc1p_all_stats["triplets"]
     pool_all = df_csv[df_csv["dataset"].str.contains("VarChAMP_pooled", na=False)]
     pool_rate = (pool_all["perturbed"].map(
         lambda x: x is True or x == "True" or x == 1).sum() / len(pool_all))
-    extra_dis = round(n_extra_pooled * pool_rate)
-    extra_non = n_extra_pooled - extra_dis
-    sfvcfp_dis = sfvc1p_all_stats["dis"] + extra_dis
-    sfvcfp_non = sfvc1p_all_stats["non"] + extra_non
+    n_total_sfvcfp = sfvcfp_struct["triplets"]
+    n_sf = sf_stats["triplets"]
+    sfvcfp_dis_est = sfvc1p_all_stats["dis"] + round(
+        (n_total_sfvcfp - sfvc1p_all_stats["triplets"]) * pool_rate
+    )
+    sfvcfp_non_est = n_total_sfvcfp - sfvcfp_dis_est
+    sfvcfp_dis = sfvcfp_dis_est
+    sfvcfp_non = sfvcfp_non_est
+    # Correct VarChAMP stats: use SFVCFP - SF, avoiding double-counting from label files
+    vc_stats["triplets"] = n_total_sfvcfp - n_sf
+    vc_stats["dis"]      = sfvcfp_dis - sf_stats["dis"]
+    vc_stats["non"]      = sfvcfp_non - sf_stats["non"]
     print(f"SFVCFP struct: {sfvcfp_struct}", flush=True)
+    print(f"VarChAMP corrected: triplets={vc_stats['triplets']}, "
+          f"dis~={vc_stats['dis']}, non~={vc_stats['non']}", flush=True)
     print(f"SFVCFP dis~={sfvcfp_dis}, non~={sfvcfp_non}", flush=True)
 
     print("Loading MegaScale preprocessed pkl...", flush=True)

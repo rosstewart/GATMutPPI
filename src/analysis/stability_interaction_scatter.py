@@ -1,0 +1,326 @@
+#!/usr/bin/env python3
+"""Scatter plot: max interaction disruption vs mean ΔΔG, per unique variant.
+
+For each variant, aggregates across all tested partners:
+  - max_score : max MutPred-PPI score across partners (worst-case disruption)
+  - mean_ddg  : mean ΔΔG across partners (partner context affects GAT output slightly)
+
+Groups:
+  ClinVar pathogenic, ClinVar benign, ClinVar VUS,
+  HGMD, gnomAD, COSMIC highly recurrent (≥16 tumor sites)
+
+Usage:
+    conda run -n ppi python src/analysis/stability_interaction_scatter.py [--cosmic-min-recurrence 16]
+
+Output:
+    results_revisions/stability_interaction/scatter_per_variant.png
+    results_revisions/stability_interaction/scatter_per_variant_kde.png
+    results_revisions/stability_interaction/per_variant_summary.tsv
+"""
+from __future__ import annotations
+
+import argparse
+import pickle
+from collections import defaultdict
+from pathlib import Path
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from scipy.stats import gaussian_kde
+
+_PUB   = Path("/data/ross/ppi_lossgain/interaction_loss/publication")
+_BASE  = Path("/data/ross/ppi_lossgain/interaction_loss")
+_HOME  = _BASE / "home"
+_DB    = _PUB / "results_revisions" / "variant_dbs"
+_STAB  = _PUB / "results_revisions" / "variant_dbs_stability"
+_OUT   = _PUB / "results_revisions" / "stability_interaction"
+
+SUBSET_PKLS = {
+    "ClinVar Pathogenic": (_HOME / "clinvar" / "pathogenic_dirbind_variant_subset.pkl", "clinvar"),
+    "ClinVar Benign":     (_HOME / "clinvar" / "benign_dirbind_variant_subset.pkl",     "clinvar"),
+    "ClinVar VUS":        (_HOME / "clinvar" / "vus_dirbind_variant_subset.pkl",        "clinvar"),
+    "HGMD":               (_HOME / "hgmd"    / "variant_subset.pkl",                    "hgmd"),
+}
+
+# gnomAD and COSMIC: no subset PKL, use all variants / filter by recurrence
+GROUP_COLORS = {
+    "ClinVar Pathogenic": "#d62728",
+    "ClinVar Benign":     "#1f77b4",
+    "ClinVar VUS":        "#9467bd",
+    "HGMD":               "#8c564b",
+    "gnomAD":             "#2ca02c",
+    "COSMIC recurrent":   "#ff7f0e",
+}
+
+
+def load_tsv_grouped(pred_tsv: Path, stab_tsv: Path) -> dict[tuple[str,str], tuple[list[float], list[float]]]:
+    """Return {(uniprot, variant): ([scores...], [ddgs...])} joined on complex_id+variant."""
+    if not pred_tsv.exists() or not stab_tsv.exists():
+        return {}
+
+    # Load stability: (complex_id, variant_1b) -> ddg
+    stab: dict[tuple[str,str], float] = {}
+    with open(stab_tsv) as f:
+        f.readline()
+        for line in f:
+            p = line.strip().split("\t")
+            if len(p) < 3:
+                continue
+            stab[(p[0], p[1])] = float(p[2])
+
+    # Group scores and ddgs by (uniprot, variant_0b)
+    result: dict[tuple[str,str], tuple[list[float], list[float]]] = defaultdict(lambda: ([], []))
+    with open(pred_tsv) as f:
+        f.readline()
+        for line in f:
+            p = line.strip().split("\t")
+            if len(p) < 3:
+                continue
+            complex_id, variant_1b, score = p[0], p[1], float(p[2])
+            under = complex_id.index("_")
+            uniprot = complex_id[:under]
+            # Convert 1-based variant key back to 0-based for internal key
+            var0 = f"{variant_1b[0]}{int(variant_1b[1:-1]) - 1}{variant_1b[-1]}"
+            ddg = stab.get((complex_id, variant_1b))
+            if ddg is not None:
+                s, d = result[(uniprot, var0)]
+                s.append(score)
+                d.append(ddg)
+
+    return result
+
+
+def aggregate_per_variant(
+    grouped: dict[tuple[str,str], tuple[list[float], list[float]]],
+    subset: set[tuple[str,str,str]] | None = None,
+) -> pd.DataFrame:
+    """Aggregate to per-variant: max score, mean ΔΔG.
+
+    subset: set of (uniprot, variant_1b, partner) — converted to 0-based variant key internally.
+    """
+    if subset is not None:
+        # Index subset by (uniprot, variant_0b)
+        allowed: set[tuple[str,str]] = set()
+        for u, v1b, p in subset:
+            try:
+                var0 = f"{v1b[0]}{int(v1b[1:-1]) - 1}{v1b[-1]}"
+            except ValueError:
+                continue  # skip malformed entries (e.g. accession in variant field)
+            allowed.add((u, var0))
+    else:
+        allowed = None
+
+    rows = []
+    for (uniprot, var0), (scores, ddgs) in grouped.items():
+        if allowed is not None and (uniprot, var0) not in allowed:
+            continue
+        if not scores:
+            continue
+        rows.append({
+            "uniprot":   uniprot,
+            "variant":   var0,
+            "max_score": max(scores),
+            "mean_score": np.mean(scores),
+            "n_partners": len(scores),
+            "mean_ddg":  np.mean(ddgs),
+            "max_ddg":   max(ddgs),
+        })
+    return pd.DataFrame(rows)
+
+
+def plot_scatter(groups: dict[str, pd.DataFrame], out: Path, sample_n: int = 5000) -> None:
+    """Scatter plot with downsampling for dense groups."""
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    rng = np.random.default_rng(42)
+    for label, df in groups.items():
+        if df.empty:
+            continue
+        color = GROUP_COLORS.get(label, "grey")
+        idx = rng.choice(len(df), size=min(sample_n, len(df)), replace=False)
+        sub = df.iloc[idx]
+        ax.scatter(sub["mean_ddg"], sub["max_score"],
+                   c=color, alpha=0.15, s=4, label=f"{label} (n={len(df):,})", rasterized=True)
+
+    ax.axhline(0.5, color="grey", linewidth=0.8, linestyle="--", alpha=0.5)
+    ax.axvline(0.0, color="grey", linewidth=0.8, linestyle="--", alpha=0.5)
+    ax.set_xlabel("Mean ΔΔG across partners (kcal/mol)\n← stabilizing | destabilizing →")
+    ax.set_ylabel("Max interaction disruption score across partners\n(MutPred-PPI, 0–1)")
+    ax.set_title("Stability vs Interaction Disruption per Variant")
+    ax.legend(fontsize=8, markerscale=4, loc="upper left")
+    plt.tight_layout()
+    plt.savefig(out, dpi=200, bbox_inches="tight")
+    plt.close()
+    print(f"Saved scatter → {out}")
+
+
+def plot_kde_contours(groups: dict[str, pd.DataFrame], out: Path, max_n: int = 20000) -> None:
+    """KDE contour plot per group — better for seeing cluster shapes."""
+    fig, axes = plt.subplots(2, 3, figsize=(14, 9), sharex=True, sharey=True)
+    axes_flat = axes.flatten()
+
+    items = list(groups.items())
+    rng = np.random.default_rng(42)
+
+    # Determine axis limits from all data
+    all_ddg = np.concatenate([df["mean_ddg"].values for df in groups.values() if not df.empty])
+    all_score = np.concatenate([df["max_score"].values for df in groups.values() if not df.empty])
+    xlim = (np.percentile(all_ddg, 1), np.percentile(all_ddg, 99))
+    ylim = (0, 1)
+
+    xgrid = np.linspace(xlim[0], xlim[1], 100)
+    ygrid = np.linspace(0, 1, 100)
+    XX, YY = np.meshgrid(xgrid, ygrid)
+    positions = np.vstack([XX.ravel(), YY.ravel()])
+
+    for idx, (label, df) in enumerate(items):
+        ax = axes_flat[idx]
+        color = GROUP_COLORS.get(label, "grey")
+
+        if df.empty:
+            ax.set_title(f"{label}\n(no data)")
+            continue
+
+        # Downsample for KDE
+        n = min(max_n, len(df))
+        idx_s = rng.choice(len(df), size=n, replace=False)
+        x = df.iloc[idx_s]["mean_ddg"].values
+        y = df.iloc[idx_s]["max_score"].values
+
+        # KDE
+        try:
+            kernel = gaussian_kde(np.vstack([x, y]), bw_method=0.15)
+            Z = kernel(positions).reshape(XX.shape)
+            ax.contourf(XX, YY, Z, levels=12, cmap="Blues" if "gnomAD" in label or "Benign" in label else "Reds",
+                        alpha=0.7)
+            ax.contour(XX, YY, Z, levels=6, colors=color, linewidths=0.5, alpha=0.6)
+        except Exception:
+            ax.scatter(x, y, c=color, alpha=0.05, s=2, rasterized=True)
+
+        ax.axhline(0.5, color="grey", linewidth=0.7, linestyle="--", alpha=0.5)
+        ax.axvline(0.0, color="grey", linewidth=0.7, linestyle="--", alpha=0.5)
+        ax.set_title(f"{label}\n(n={len(df):,} variants)", fontsize=10)
+        ax.set_xlim(xlim)
+        ax.set_ylim(ylim)
+
+        # Median crosshair
+        ax.axvline(df["mean_ddg"].median(), color=color, linewidth=1.5, linestyle=":",
+                   alpha=0.8, label=f"median ΔΔG={df['mean_ddg'].median():.2f}")
+        ax.axhline(df["max_score"].median(), color=color, linewidth=1.5, linestyle="-.",
+                   alpha=0.8, label=f"median score={df['max_score'].median():.2f}")
+        ax.legend(fontsize=7, loc="upper right")
+
+    for idx in range(len(items), len(axes_flat)):
+        axes_flat[idx].set_visible(False)
+
+    for ax in axes[1]:
+        ax.set_xlabel("Mean ΔΔG (kcal/mol)", fontsize=9)
+    for ax in axes[:, 0]:
+        ax.set_ylabel("Max disruption score", fontsize=9)
+
+    plt.suptitle("Per-variant: Stability vs Interaction Disruption by Group", fontsize=12, y=1.01)
+    plt.tight_layout()
+    plt.savefig(out, dpi=200, bbox_inches="tight")
+    plt.close()
+    print(f"Saved KDE → {out}")
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--cosmic-min-recurrence", type=int, default=16,
+                    help="Min tumor-site recurrence for 'COSMIC recurrent' group (default: 16)")
+    args = ap.parse_args()
+
+    _OUT.mkdir(parents=True, exist_ok=True)
+
+    # --- Load COSMIC recurrence ---
+    cosmic_rec_file = _BASE / "cosmic" / "vt_to_tumor_site.pkl"
+    cosmic_high_rec: set[tuple[str,str]] | None = None
+    if cosmic_rec_file.exists():
+        print(f"Loading COSMIC recurrence (min={args.cosmic_min_recurrence})...", flush=True)
+        with open(cosmic_rec_file, "rb") as f:
+            vt_to_sites = pickle.load(f)
+        # Keys are "UNIPROT VARIANT_1b" — convert to (uniprot, var0b)
+        cosmic_high_rec = set()
+        for key, sites in vt_to_sites.items():
+            if len(sites) >= args.cosmic_min_recurrence:
+                parts = key.split(" ", 1)
+                if len(parts) == 2:
+                    u, v1b = parts
+                    var0 = f"{v1b[0]}{int(v1b[1:-1]) - 1}{v1b[-1]}"
+                    cosmic_high_rec.add((u, var0))
+        print(f"  {len(cosmic_high_rec):,} high-recurrence COSMIC variants", flush=True)
+
+    # --- Load and group TSV data ---
+    db_grouped: dict[str, dict] = {}
+    for db in ["clinvar", "hgmd", "gnomad", "cosmic"]:
+        pred_tsv = _DB  / f"{db}_mutpred_ppi_predictions.tsv"
+        stab_tsv = _STAB / f"{db}_stability_predictions.tsv"
+        if not pred_tsv.exists() or not stab_tsv.exists():
+            print(f"[SKIP] {db}: missing TSV", flush=True)
+            continue
+        print(f"Loading {db}...", flush=True)
+        db_grouped[db] = load_tsv_grouped(pred_tsv, stab_tsv)
+        print(f"  {len(db_grouped[db]):,} unique (uniprot, variant) pairs", flush=True)
+
+    # --- Build per-group DataFrames ---
+    groups: dict[str, pd.DataFrame] = {}
+
+    for label, (pkl_path, db) in SUBSET_PKLS.items():
+        if db not in db_grouped:
+            continue
+        if not pkl_path.exists():
+            print(f"[SKIP] {label}: subset PKL not found", flush=True)
+            continue
+        print(f"Building {label}...", flush=True)
+        with open(pkl_path, "rb") as f:
+            subset = pickle.load(f)  # set of (uniprot, variant_1b, partner)
+        groups[label] = aggregate_per_variant(db_grouped[db], subset)
+        print(f"  {len(groups[label]):,} variants", flush=True)
+
+    if "gnomad" in db_grouped:
+        print("Building gnomAD (all)...", flush=True)
+        groups["gnomAD"] = aggregate_per_variant(db_grouped["gnomad"], subset=None)
+        print(f"  {len(groups['gnomAD']):,} variants", flush=True)
+
+    if "cosmic" in db_grouped and cosmic_high_rec is not None:
+        print(f"Building COSMIC recurrent (≥{args.cosmic_min_recurrence})...", flush=True)
+        # Filter aggregated COSMIC to high-recurrence variants
+        cosmic_all = aggregate_per_variant(db_grouped["cosmic"], subset=None)
+        mask = cosmic_all.apply(lambda r: (r["uniprot"], r["variant"]) in cosmic_high_rec, axis=1)
+        groups["COSMIC recurrent"] = cosmic_all[mask].reset_index(drop=True)
+        print(f"  {len(groups['COSMIC recurrent']):,} variants", flush=True)
+
+    # --- Summary statistics ---
+    print("\nPer-variant summary:")
+    rows = []
+    for label, df in groups.items():
+        if df.empty:
+            continue
+        rows.append({
+            "group": label,
+            "n_variants": len(df),
+            "median_max_score": df["max_score"].median(),
+            "median_mean_ddg":  df["mean_ddg"].median(),
+            "pct_score_gt05":   (df["max_score"] > 0.5).mean() * 100,
+            "pct_ddg_gt05":     (df["mean_ddg"] > 0.5).mean() * 100,
+            "pct_both":         ((df["max_score"] > 0.5) & (df["mean_ddg"] > 0.5)).mean() * 100,
+        })
+        print(f"  {label}: n={len(df):,}  "
+              f"med_score={df['max_score'].median():.3f}  "
+              f"med_ddg={df['mean_ddg'].median():.3f}")
+
+    pd.DataFrame(rows).to_csv(_OUT / "per_variant_summary.tsv", sep="\t", index=False, float_format="%.4f")
+
+    # --- Plots ---
+    print("\nGenerating scatter...", flush=True)
+    plot_scatter(groups, _OUT / "scatter_per_variant.png")
+    print("Generating KDE contours...", flush=True)
+    plot_kde_contours(groups, _OUT / "scatter_per_variant_kde.png")
+
+
+if __name__ == "__main__":
+    main()

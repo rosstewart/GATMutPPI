@@ -372,17 +372,45 @@ conda run -n ppi python src/evaluation/precompute_pplm_embeddings.py
 
 ### Phase 4: VarChAMP Blind Test (Fig 4)
 
+The SFVCFP test set contains 22,321 entries from four VarChAMP sub-cohorts.
+Two of these (VC1p: 1,377 entries and CAVA: 1,581 entries) use gene-name/Entrez
+protein IDs rather than UniProt IDs. The main blind test scripts handle
+VC2026+pooled entries (UniProt-keyed, from training_data.csv). The VC1p and
+CAVA entries are processed separately via supplement scripts that remap gene
+names to UniProt IDs using `gene_symbol_to_uniprot.pkl` (the same mapping used
+in GCV construction), then classify each entry as C1/C2/C3.
+
 ```bash
-# Run blind test for each method (saves per-class npy arrays)
+# Step 4a: Run main VCFP blind test (VC2026 + pooled entries)
 conda run -n ppi python src/evaluation/mutpred_ppi_cv.py \
     --dataset sahni_fragoza_varchamp_full_pooled ...
+# (repeat for eSIG-Net, SWING, MINT, PPLM — see their respective cv scripts)
 
-# Enforce consistent test-set membership across methods
+# Step 4b: Supplement VC1p+CAVA entries for each method
+conda run -n ppi python src/evaluation/supplement_mutpredppi_vc1pcava.py --device cuda:0
+conda run -n ppi python src/evaluation/supplement_esignet_vc1pcava.py --device cuda:0
+conda run -n ppi python src/evaluation/supplement_mint_vc1pcava.py --predictor seq_diff
+conda run -n ppi python src/evaluation/supplement_mint_vc1pcava.py --predictor site_diff
+conda run -n ppi python src/evaluation/supplement_pplm_vc1pcava.py --predictor seq_diff
+conda run -n ppi python src/evaluation/supplement_pplm_vc1pcava.py --predictor site_diff
+conda run -n ppi python src/evaluation/supplement_swing_vc1pcava.py
+conda run -n ppi python src/evaluation/supplement_swing_vc1pcava.py --test-pretrain
+
+# Step 4c: Merge supplements into main per-class arrays
+conda run -n ppi python src/analysis/merge_vc1pcava_into_main.py
+
+# Step 4d: Enforce consistent test-set membership across methods
 conda run -n ppi python src/analysis/restratify_vcfp_blind_test.py
 
-# Generate Fig 4 from per-class arrays
+# Step 4e: Generate Fig 4 from per-class arrays
 conda run -n ppi python src/analysis/varchamp_blind_test.py
 ```
+
+**Note:** MINT and PPLM caches must include vc1pcava protein embeddings. Run
+`precompute_mint_embeddings.py --dataset sahni_fragoza_varchamp1p_cava` before
+Step 4b. Methods that require PDB structures (SAAMBE-3D, MutPPI, MutPPI+,
+DDMutPPI) cannot predict vc1pcava entries and are evaluated on the 14,116
+VC2026+pooled entries only.
 
 ### Phase 5: Variant Database Inference (Fig 5–7)
 
