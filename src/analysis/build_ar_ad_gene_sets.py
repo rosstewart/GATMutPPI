@@ -10,6 +10,11 @@ AR and an AD curation (for different diseases) are excluded from both sets.
 
 Input:
     /data/ross/ppi_lossgain/interaction_loss/ClinGen_MOI.csv
+    Curated per: Chen Y, Fayer S, Jain S, Benazouz M, Sverchkov Y, Stone J, Sharma H,
+    Bergquist T, Stewart R, Mooney SD, Craven M, Radivojac P, Starita LM, Fowler DM,
+    Pejaver V. Gene- and domain-aware calibration increases the clinical utility of
+    variant effect predictors. bioRxiv [Preprint]. 2026 Mar 31:2026.02.17.706269.
+    doi: 10.64898/2026.02.17.706269. PMID: 41756877; PMCID: PMC12934735.
 
 Output:
     /data/ross/ppi_lossgain/interaction_loss/clingen_ar_ad_uniprot_sets.pkl

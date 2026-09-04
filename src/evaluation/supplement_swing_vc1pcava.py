@@ -46,7 +46,7 @@ from run_swing_blind_test_vcfp import (  # noqa: E402
 )
 
 _TRAINING_CSV = Path(
-    "/home/rcstewart/ppi_lossgain/2026/mutppi/benchmark/training_data.csv"
+    "/home/rcstewart/mutppi/benchmark/training_data.csv"
 )
 _VC1P_MAP  = Path("/data/ross/ppi_lossgain/interaction_loss/home/varchamp1p/gene_symbol_to_uniprot.pkl")
 _CAVA_MAP  = Path("/data/ross/ppi_lossgain/interaction_loss/home/cava/gene_symbol_to_uniprot.pkl")

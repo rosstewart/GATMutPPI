@@ -30,12 +30,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-_CV_MOD       = Path("/data/ross/ppi_lossgain/interaction_loss/publication/src/evaluation")
-_PPLM_SCRIPTS = Path(__file__).resolve().parent.parent
-_BENCHMARK_DIR = Path("/home/rcstewart/ppi_lossgain/2026/mutppi/benchmark")
-
-sys.path.insert(0, str(_PPLM_SCRIPTS))
-sys.path.insert(0, str(_BENCHMARK_DIR))
+_CV_MOD = Path(__file__).resolve().parent  # src/evaluation — also holds predictors/ now
 sys.path.insert(0, str(_CV_MOD))
 
 import predictors.pplm_mlp as _pplm_mod  # noqa: E402
@@ -47,8 +42,8 @@ from mutpred_ppi_cv import (  # noqa: E402
     get_gene_name, split_wt_id_underscore,
 )
 
-_TRAINING_CSV = Path("/home/rcstewart/ppi_lossgain/2026/mutppi/benchmark/training_data.csv")
-_GCV_CACHE    = Path("/data/ross/ppi_lossgain/interaction_loss/nm_revisions/pplm_cache.pkl")
+_TRAINING_CSV = Path("/home/rcstewart/mutppi/benchmark/training_data.csv")
+_GCV_CACHE    = Path(__file__).resolve().parents[2] / "data_caches" / "pplm_cache.pkl"
 _VC1P_MAP     = Path("/data/ross/ppi_lossgain/interaction_loss/home/varchamp1p/gene_symbol_to_uniprot.pkl")
 _CAVA_MAP     = Path("/data/ross/ppi_lossgain/interaction_loss/home/cava/gene_symbol_to_uniprot.pkl")
 _OUT_DIR      = Path(

@@ -32,6 +32,8 @@ VT_TO_TUMOR_SITE = _BASE / "cosmic" / "vt_to_tumor_site.pkl"
 ONCO_TSG_FILE    = _BASE / "cosmic_mutations" / "onco_tsg_dict.pkl"
 AUTISM_SUBSET    = _HOME / "autism" / "variant_subset.pkl"
 NEURODEV_LABELS  = _HOME / "autism" / "variant_label_dict.pkl"
+HGMD_SUBSET      = _HOME / "hgmd" / "variant_subset.pkl"
+AR_AD_FILE       = _BASE / "clingen_ar_ad_uniprot_sets.pkl"
 
 
 def parse_preds(tsv_path) -> pd.DataFrame:
@@ -100,11 +102,23 @@ def main() -> None:
     else:
         print("  WARNING: benign AF file not found — rare_benign empty", flush=True)
 
+    ar_uniprots, ad_uniprots = set(), set()
+    if AR_AD_FILE.exists():
+        ar_ad = pickle.load(open(AR_AD_FILE, "rb"))
+        ar_uniprots, ad_uniprots = ar_ad.get("AR", set()), ar_ad.get("AD", set())
+    else:
+        print(f"  WARNING: {AR_AD_FILE} not found — AR/AD rows will be empty "
+              "(run build_ar_ad_gene_sets.py first)", flush=True)
+    ar_pathogenic_set = {(u, v, p) for (u, v, p) in subsets["pathogenic"] if u in ar_uniprots}
+    ad_pathogenic_set = {(u, v, p) for (u, v, p) in subsets["pathogenic"] if u in ad_uniprots}
+
     lines += [r"\multicolumn{6}{l}{\textit{ClinVar}} \\"]
     lines.append(row("Rare Benign",  stats(cv_df, rare_benign_set)))
     lines.append(row("Benign",       stats(cv_df, subsets["benign"])))
     lines.append(row("Pathogenic",   stats(cv_df, subsets["pathogenic"])))
     lines.append(row("VUS",          stats(cv_df, subsets["vus"])))
+    lines.append(row("Pathogenic AR", stats(cv_df, ar_pathogenic_set)))
+    lines.append(row("Pathogenic AD", stats(cv_df, ad_pathogenic_set)))
     lines.append(r"\hline")
 
     # ── COSMIC ───────────────────────────────────────────────────────────────
@@ -154,6 +168,12 @@ def main() -> None:
         hgmd_df = parse_preds(hgmd_tsv)
         lines += [r"\multicolumn{6}{l}{\textit{HGMD}} \\"]
         lines.append(row("All", stats(hgmd_df)))
+        if HGMD_SUBSET.exists():
+            hgmd_subset = pickle.load(open(HGMD_SUBSET, "rb"))
+            ar_hgmd_set = {(u, v, p) for (u, v, p) in hgmd_subset if u in ar_uniprots}
+            ad_hgmd_set = {(u, v, p) for (u, v, p) in hgmd_subset if u in ad_uniprots}
+            lines.append(row("AR", stats(hgmd_df, ar_hgmd_set)))
+            lines.append(row("AD", stats(hgmd_df, ad_hgmd_set)))
         lines.append(r"\hline")
 
     # ── gnomAD ────────────────────────────────────────────────────────────────

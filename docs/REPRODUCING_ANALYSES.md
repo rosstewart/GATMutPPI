@@ -149,7 +149,7 @@ conda run -n ppi python src/analysis/stability_interaction_scatter.py --cosmic-m
 Output: `results_revisions/stability_interaction/scatter_per_variant_kde.png` → **S-stability**
 (6 panels: ClinVar Pathogenic, ClinVar Benign, ClinVar VUS, gnomAD, HGMD, COSMIC recurrence≥32)
 
-### Reviewer analyses
+### Robustness analyses
 
 ```bash
 # Interface vs. non-interface AUROC stratification
@@ -163,9 +163,18 @@ conda run -n ppi python src/analysis/threshold_sensitivity.py
 
 # Protein class stratification (single- vs. multi-domain)
 conda run -n ppi python src/analysis/protein_class_stratification.py
+
+# Combined 3-row figure (interface / pLDDT / protein-class in one image, panels A/B/C)
+# reuses compute_curves()/plot_on_axes() from the three scripts above — run them
+# first (or let this script call compute_curves() itself, which it does).
+conda run -n ppi python src/analysis/combined_robustness_figure.py
 ```
 
-Output in `results_revisions/reviewer_analyses/`.
+Output: each standalone script still produces its own `*_auroc_by_class.png` + `.tsv`;
+`combined_robustness_figure.py` additionally produces `combined_robustness_by_class.png`
+(all three comparisons stacked as rows A/B/C in one figure).
+
+Output in `results_revisions/robustness_analyses/`.
 
 ## Phase 7: Table Generation
 

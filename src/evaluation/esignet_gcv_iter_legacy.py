@@ -28,8 +28,10 @@ import pandas as pd
 from Bio import SeqIO
 from sklearn.metrics import roc_auc_score
 
-# ── eSIG-Net import (vendored in-repo, see src/evaluation/predictors/) ─────────
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+# ── eSIG-Net import ────────────────────────────────────────────────────────────
+# Resolve benchmark dir relative to this script's location
+_BENCHMARK_DIR = Path(__file__).resolve().parents[1] / "2026/mutppi/benchmark"
+sys.path.insert(0, str(_BENCHMARK_DIR))
 
 import predictors.esignet as _esignet_mod                                    # noqa: E402
 from predictors.esignet import ESigNetPredictor, _compute_573, _FEAT_CACHE  # noqa: E402
@@ -118,6 +120,20 @@ DATASET_CONFIGS: dict[str, DatasetConfig] = {
         all_vt_ids_file="sahni_varchamp1p_cava_train_all_vt_ids.pkl",
         vt_id_sep="_",
         pair_test_classes_pat="combined_sahni_varchamp1p_cava_seq_confirmed_concat_clust_pair_test_classes_{seed}.npy",
+        dedup=True,
+    ),
+    "sahni_fragoza_varchamp2026": DatasetConfig(
+        name="sahni_fragoza_varchamp2026",
+        pos_file="swing_train.pos",
+        neg_file="swing_train.neg",
+        extra_files=["varchamp2026_variant_interaction.tsv"],
+        fasta_file="sahni_fragoza_varchamp2026_wt_and_vt.fasta",
+        fasta_use_description=False,
+        apply_uniprot_map=False,
+        fold_splits_pat="sahni_fragoza_varchamp2026_train_fold_splits_{seed}.pkl",
+        all_vt_ids_file="sahni_fragoza_varchamp2026_train_all_vt_ids.pkl",
+        vt_id_sep="_",
+        pair_test_classes_pat="combined_sahni_fragoza_varchamp2026_pair_test_classes_{seed}.npy",
         dedup=True,
     ),
     # SF + VarChAMP_pooled (Jul 2026).  The combined all_vt_ids uses _ for the SF

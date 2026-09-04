@@ -268,7 +268,6 @@ def plot_kde_contours(groups: dict[str, pd.DataFrame], out: Path, cosmic_min_rec
     for ax in axes[:, 0]:
         ax.set_ylabel("Max disruption score", fontsize=9)
 
-    plt.suptitle("Per-variant: Stability vs Interaction Disruption by Group", fontsize=13, y=1.03)
     plt.tight_layout()
     plt.savefig(out, dpi=200, bbox_inches="tight")
     plt.close()

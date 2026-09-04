@@ -4,7 +4,8 @@
 Prerequisites:
 1. ProtT5 embeddings precomputed with precompute_prott5.py
 2. AlphaFold3 contact graphs in af3_graphs/ (.mat files + all_variants.labels)
-3. Trained model checkpoints in models/
+3. Trained model checkpoints in weights/ (the SFVCFP model — variant-DB inference
+   is not a blind test, so the model trained on the most data is used)
 
 Usage (nohup recommended for large datasets):
     nohup conda run -n ppi python run_variant_db_inference.py \\
@@ -41,7 +42,7 @@ from scipy.io import loadmat
 
 # Resolve the models directory relative to this file
 _THIS_DIR = Path(__file__).resolve().parent
-_MODELS_DIR = _THIS_DIR.parent.parent / "models"
+_MODELS_DIR = _THIS_DIR.parent.parent / "weights"
 _SCALER_PATH = _MODELS_DIR / "mutation_diff_scaler.pkl"
 
 # Add inference/utils to path so we can import model_loader

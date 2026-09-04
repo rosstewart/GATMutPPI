@@ -35,10 +35,10 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import roc_auc_score
 
-# ── shared code from esignet_scripts ─────────────────────────────────────────
-_ESIGNET_SCRIPTS = Path(__file__).resolve().parent.parent / "esignet_scripts"
-sys.path.insert(0, str(_ESIGNET_SCRIPTS))
-from esignet_gcv_iter import (           # noqa: E402
+# ── shared code (vendored in-repo, see src/evaluation/esignet_gcv_iter_legacy.py
+#    and src/evaluation/predictors/) ───────────────────────────────────────────
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from esignet_gcv_iter_legacy import (    # noqa: E402
     DATASET_CONFIGS,
     DatasetConfig,
     _CV_DIR,
@@ -47,10 +47,6 @@ from esignet_gcv_iter import (           # noqa: E402
     swing_to_esignet,
     _compute_class_aucs,
 )
-
-# ── benchmark predictors ──────────────────────────────────────────────────────
-_BENCHMARK_DIR = Path(__file__).resolve().parents[1] / "2026/mutppi/benchmark"
-sys.path.insert(0, str(_BENCHMARK_DIR))
 
 import predictors.mint_mlp as _mint_mod   # noqa: E402
 from predictors.mint_mlp import MINTSeqDiff, MINTSiteDiff  # noqa: E402

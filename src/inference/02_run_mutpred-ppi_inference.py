@@ -22,7 +22,7 @@ warnings.filterwarnings("ignore", category=InconsistentVersionWarning)
 
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
-_DEFAULT_MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../', 'models_new'))
+_DEFAULT_MODELS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../', 'weights'))
 
 # parse arguments
 parser = argparse.ArgumentParser(description='Run MutPred-PPI inference')
@@ -30,7 +30,8 @@ parser.add_argument('working_dir', help='Working directory containing af3_graphs
 parser.add_argument('--device', default='cuda:0', help='GPU device (default: cuda:0)')
 parser.add_argument('--models-dir', default=_DEFAULT_MODELS_DIR,
                     help='Directory containing model .pt files and mutation_diff_scaler.pkl '
-                         '(default: models_new/ next to publication root, loads _all.pt for inference)')
+                         '(default: weights/ next to publication root — the primary '
+                         'Sahni+Fragoza+VarChAMP-trained model, recommended for general use)')
 args = parser.parse_args()
 
 device = args.device

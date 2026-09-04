@@ -15,8 +15,8 @@ Confidence bins (per complex):
   High:   mean pLDDT ≥ 85
 
 Output:
-  results_revisions/reviewer_analyses/plddt_auroc_by_class.png
-  results_revisions/reviewer_analyses/plddt_auroc_summary.tsv
+  results_revisions/robustness_analyses/plddt_auroc_by_class.png
+  results_revisions/robustness_analyses/plddt_auroc_summary.tsv
 
 Usage:
   conda run -n ppi python src/analysis/plddt_stratification.py
@@ -37,10 +37,11 @@ CV_DIR = "/home/rcstewart/gnn/ppi_interaction_loss/cv_splits"
 PLDDT_CACHE = f"{_BASE}/2026/plddt_cache.pkl"
 GCV_RESULTS = f"{_PUB}/results_revisions/macro_aucs/MutPredPPI_sahni_fragoza_megascale_all_detailed_results.pkl"
 VT_IDS_FILE = f"{CV_DIR}/sahni_fragoza_train_all_vt_ids.pkl"
-OUT_DIR = f"{_PUB}/results_revisions/reviewer_analyses"
+OUT_DIR = f"{_PUB}/results_revisions/robustness_analyses"
 N_SEEDS = 30
 MIN_N = 5  # matches roc_plots.py spirit: just require both label classes per fold
 N_SEM_DIVISOR = 10  # matches hardcoded value in roc_plots.py compute_roc_with_variance
+FPR_GRID = np.linspace(0, 1, 100)  # module-level: shared by compute_curves() and plot_on_axes()
 
 PLDDT_BINS = [
     ("low",    0,    70),
@@ -90,9 +91,11 @@ def build_plddt_bin_cache(vt_ids: list, plddt_cache: dict) -> dict:
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 
-def main():
-    os.makedirs(OUT_DIR, exist_ok=True)
+def compute_curves():
+    """Load data and compute per-(class, pLDDT bin) ROC fold curves.
 
+    Returns (fold_curves, all_vt_ids_bin).
+    """
     print("Loading pLDDT cache...")
     with open(PLDDT_CACHE, "rb") as f:
         plddt_cache = pickle.load(f)
@@ -109,7 +112,6 @@ def main():
     with open(GCV_RESULTS, "rb") as f:
         gcv_results = pickle.load(f)
 
-    FPR_GRID = np.linspace(0, 1, 100)
 
     # fold_curves[class][bin] = list of per-fold interpolated TPR arrays
     fold_curves = {c: {b: [] for b, *_ in PLDDT_BINS} for c in (1, 2, 3)}
@@ -171,10 +173,19 @@ def main():
 
         print(f"  Seed {seed}: done", flush=True)
 
-    # ── Plot ───────────────────────────────────────────────────────────────────
+    return fold_curves, all_vt_ids_bin
+
+
+CLASS_LABELS = {1: "Class 1 (both seen)", 2: "Class 2 (one seen)", 3: "Class 3 (neither seen)"}
+
+
+def plot_on_axes(axes, fold_curves, all_vt_ids_bin):
+    """Draw the 3-panel (C1/C2/C3) pLDDT-bin ROC comparison onto pre-supplied axes.
+
+    Returns summary_rows (list[str]) for the TSV output.
+    """
     bin_names = [b for b, *_ in PLDDT_BINS]
-    class_labels = {1: "Class 1 (both seen)", 2: "Class 2 (one seen)", 3: "Class 3 (neither seen)"}
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4.5), sharey=True)
+    class_labels = CLASS_LABELS
 
     summary_rows = []
     for ax, cls in zip(axes, (1, 2, 3)):
@@ -221,6 +232,16 @@ def main():
         if cls == 1:
             ax.set_ylabel("True Positive Rate", fontsize=10)
         ax.legend(loc="lower right", fontsize=8)
+
+    return summary_rows
+
+
+def main():
+    os.makedirs(OUT_DIR, exist_ok=True)
+    fold_curves, all_vt_ids_bin = compute_curves()
+
+    fig, axes = plt.subplots(1, 3, figsize=(13, 4.5), sharey=True)
+    summary_rows = plot_on_axes(axes, fold_curves, all_vt_ids_bin)
 
     plt.tight_layout()
     out_png = os.path.join(OUT_DIR, "plddt_auroc_by_class.png")

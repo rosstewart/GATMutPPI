@@ -40,7 +40,7 @@ from mutpred_ppi_cv import (  # noqa: E402
 )
 
 _MODEL_PATH = Path(
-    "/data/ross/ppi_lossgain/interaction_loss/publication/models_new/"
+    "/data/ross/ppi_lossgain/interaction_loss/publication/models_sahni_fragoza/"
     "MutPred-PPI_sahni_fragoza_megascale_all_all.pt"
 )
 _SCALER_PATH = Path(
@@ -48,7 +48,7 @@ _SCALER_PATH = Path(
     "mutation_diff_scaler.pkl"
 )
 _TRAINING_CSV = Path(
-    "/home/rcstewart/ppi_lossgain/2026/mutppi/benchmark/training_data.csv"
+    "/home/rcstewart/mutppi/benchmark/training_data.csv"
 )
 _VC1P_MAP  = Path("/data/ross/ppi_lossgain/interaction_loss/home/varchamp1p/gene_symbol_to_uniprot.pkl")
 _CAVA_MAP  = Path("/data/ross/ppi_lossgain/interaction_loss/home/cava/gene_symbol_to_uniprot.pkl")

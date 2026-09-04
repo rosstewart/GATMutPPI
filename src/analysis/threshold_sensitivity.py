@@ -11,8 +11,8 @@ lists) from the classified variant DB directory, reclassifies at each threshold,
 then runs multinomial bootstrap enrichment vs gnomAD.
 
 Output:
-  results_revisions/reviewer_analyses/threshold_sensitivity.png
-  results_revisions/reviewer_analyses/threshold_sensitivity.tsv
+  results_revisions/robustness_analyses/threshold_sensitivity.png
+  results_revisions/robustness_analyses/threshold_sensitivity.tsv
 
 Usage:
   conda run -n ppi python src/analysis/threshold_sensitivity.py [--n-bootstrap 10000]
@@ -29,7 +29,7 @@ import matplotlib.pyplot as plt
 # ── Paths ──────────────────────────────────────────────────────────────────────
 _PUB = "/data/ross/ppi_lossgain/interaction_loss/publication"
 DATA_DIR = f"{_PUB}/results_revisions/variant_dbs_sfvfp"
-OUT_DIR = f"{_PUB}/results_revisions/reviewer_analyses"
+OUT_DIR = f"{_PUB}/results_revisions/robustness_analyses"
 
 THRESHOLDS = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 # Color scheme: higher t = more stringent disruption threshold (disease mechanism).
@@ -61,6 +61,10 @@ GROUPS = [
      "Pathogenic\n(ClinVar)", "#D32F2F"),
     ("clinvar_vus",          f"{DATA_DIR}/clinvar/vus_posterior_ls.pkl",
      "VUS\n(ClinVar)", "#9E9E9E"),
+    ("clinvar_ar_pathogenic", f"{DATA_DIR}/clinvar/ar_pathogenic_posterior_ls.pkl",
+     "Pathogenic AR\n(ClinVar)", "#00897B"),
+    ("clinvar_ad_pathogenic", f"{DATA_DIR}/clinvar/ad_pathogenic_posterior_ls.pkl",
+     "Pathogenic AD\n(ClinVar)", "#FFB300"),
     # COSMIC
     ("cosmic_single",        f"{DATA_DIR}/cosmic/cosmic_single_posterior_ls.pkl",
      "Single\n(COSMIC)", "#FDD835"),
@@ -77,6 +81,10 @@ GROUPS = [
     # HGMD
     ("hgmd",                 f"{DATA_DIR}/hgmd/hgmd_posterior_ls.pkl",
      "HGMD", "#E74C3C"),
+    ("hgmd_ar",              f"{DATA_DIR}/hgmd/ar_hgmd_posterior_ls.pkl",
+     "AR\n(HGMD)", "#00897B"),
+    ("hgmd_ad",              f"{DATA_DIR}/hgmd/ad_hgmd_posterior_ls.pkl",
+     "AD\n(HGMD)", "#FFB300"),
     # gnomAD AF bins
     ("gnomad_af1",           f"{DATA_DIR}/gnomad/gnomad_upper_af_1e-06_posterior_ls.pkl",
      "AF≤1e-6\n(gnomAD)", "#FF7043"),
@@ -105,7 +113,7 @@ GNOMAD_ALL_PKL = f"{DATA_DIR}/gnomad/gnomad_posterior_ls.pkl"
 
 # Visual separators between dataset groups (after these group keys, add spacing)
 SEPARATOR_AFTER = {
-    "clinvar_vus", "cosmic_32+", "hgmd", "gnomad_af6", "ndd_control",
+    "clinvar_ad_pathogenic", "cosmic_32+", "hgmd_ad", "gnomad_af6", "ndd_control",
 }
 
 

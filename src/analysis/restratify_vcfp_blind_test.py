@@ -22,7 +22,7 @@ import pandas as pd
 
 _PUB    = "/data/ross/ppi_lossgain/interaction_loss/publication"
 _EVAL   = os.path.join(_PUB, "results/varchamp_seqcnf_newvar_eval")
-_CSV    = "/home/rcstewart/ppi_lossgain/2026/mutppi/benchmark/training_data.csv"
+_CSV    = "/home/rcstewart/mutppi/benchmark/training_data.csv"
 
 # All method descriptions that have VCFP blind test arrays
 METHODS = [

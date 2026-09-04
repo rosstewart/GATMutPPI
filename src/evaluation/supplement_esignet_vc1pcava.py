@@ -22,10 +22,8 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import roc_auc_score
 
-_CV_MOD    = Path("/data/ross/ppi_lossgain/interaction_loss/publication/src/evaluation")
-_BENCH_DIR = Path("/home/rcstewart/ppi_lossgain/2026/mutppi/benchmark")
+_CV_MOD = Path(__file__).resolve().parent  # src/evaluation — also holds predictors/ now
 sys.path.insert(0, str(_CV_MOD))
-sys.path.insert(0, str(_BENCH_DIR))
 
 from mutpred_ppi_cv import (  # noqa: E402
     _load_varchamp1p_raw, _load_cava_raw,
@@ -35,7 +33,7 @@ import predictors.esignet as _esignet_mod          # noqa: E402
 from predictors.esignet import ESigNetPredictor    # noqa: E402
 
 _TRAINING_CSV = Path(
-    "/home/rcstewart/ppi_lossgain/2026/mutppi/benchmark/training_data.csv"
+    "/home/rcstewart/mutppi/benchmark/training_data.csv"
 )
 _ESM_CACHE = "/data/ross/ppi_lossgain/interaction_loss/2026/esm2_residue_embeddings_with_pooled.pkl"
 _VC1P_SUPP = Path(

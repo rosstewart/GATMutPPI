@@ -163,7 +163,7 @@ def run_inference_on_dataset(device_code, dataset_name, graph_dir, t5_fasta_path
     BAGGED = 0
 
     if models_dir is None:
-        models_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../', 'models_new'))
+        models_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../', 'weights'))
     model_dir = os.path.abspath(models_dir)
     assert os.path.exists(model_dir), model_dir
 

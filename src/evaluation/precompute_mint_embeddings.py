@@ -340,7 +340,7 @@ def _parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--output",
-        default="/data/ross/ppi_lossgain/interaction_loss/nm_revisions/mint_cache.pkl",
+        default=str(Path(__file__).resolve().parents[2] / "data_caches" / "mint_cache.pkl"),
         help="Output .pkl cache file path (created or extended if it exists)",
     )
     p.add_argument(

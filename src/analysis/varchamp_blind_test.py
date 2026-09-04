@@ -152,7 +152,6 @@ def plot_comparison(methods_data, save_name="roc_varchamp_full_pooled.png"):
         ax.grid(True, alpha=0.3)
         ax.legend(legend_handles, legend_labels, loc="lower right", fontsize=9)
 
-    plt.suptitle("VarChAMP (VCFP) Blind-Test ROC Curves", fontsize=15)
     plt.tight_layout()
 
     if SAVE_PLOTS:

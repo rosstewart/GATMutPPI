@@ -8,12 +8,12 @@ all hardcoded dataset paths.  This script only adds checkpoint saving and the
 Usage — 10-fold ensemble (Option A):
     conda run -n ppi python src/training/train_final_model.py \\
         --dataset sahni_fragoza --ablation megascale_all --seed 1 \\
-        --save-models-dir /path/to/models_new/ --device cuda:0
+        --save-models-dir /path/to/models_sahni_fragoza/ --device cuda:0
 
 Usage — single model on all data (Option B):
     conda run -n ppi python src/training/train_final_model.py \\
         --dataset sahni_fragoza --ablation megascale_all --seed 1 \\
-        --save-models-dir /path/to/models_new/ --device cuda:0 --no-cv
+        --save-models-dir /path/to/models_sahni_fragoza/ --device cuda:0 --no-cv
 """
 
 from __future__ import annotations
@@ -56,6 +56,14 @@ from mutpred_ppi_cv import (  # noqa: E402
 # ── model building helper ─────────────────────────────────────────────────────
 
 def _load_ckpt(path, mdl, device):
+    if not Path(path).exists():
+        raise FileNotFoundError(
+            f"Checkpoint not found: {path}\n"
+            "If this is the MegaScale pretrain checkpoint, either download it "
+            "into model_weights/ (see Zenodo, docs/DATA_SOURCES.md) or generate it "
+            "from scratch by running Phase 0 in docs/TRAINING.md "
+            "(preprocess_stability_data.py + pretrain_stability.py)."
+        )
     ckpt = torch.load(path, map_location=device)
     mdict = mdl.state_dict()
     mdl.load_state_dict(

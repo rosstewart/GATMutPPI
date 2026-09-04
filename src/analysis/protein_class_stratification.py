@@ -11,8 +11,8 @@ Aggregation matches compute_roc_with_variance() in roc_plots.py exactly:
   - Mean ± SEM where SEM = std / sqrt(10)
 
 Output:
-  results_revisions/reviewer_analyses/protein_class_auroc_by_class.png
-  results_revisions/reviewer_analyses/protein_class_auroc_summary.tsv
+  results_revisions/robustness_analyses/protein_class_auroc_by_class.png
+  results_revisions/robustness_analyses/protein_class_auroc_summary.tsv
   figures/protein_class_auroc_by_class.png  (symlink)
 
 Usage:
@@ -34,11 +34,12 @@ CV_DIR    = "/home/rcstewart/gnn/ppi_interaction_loss/cv_splits"
 PFAM_CACHE = f"{_BASE}/2026/pfam_domains_cache.pkl"
 GCV_RESULTS = f"{_PUB}/results_revisions/macro_aucs/MutPredPPI_sahni_fragoza_megascale_all_detailed_results.pkl"
 VT_IDS_FILE = f"{CV_DIR}/sahni_fragoza_train_all_vt_ids.pkl"
-OUT_DIR   = f"{_PUB}/results_revisions/reviewer_analyses"
+OUT_DIR   = f"{_PUB}/results_revisions/robustness_analyses"
 
 N_SEEDS       = 30
 MIN_N         = 5
 N_SEM_DIVISOR = 10
+FPR_GRID = np.linspace(0, 1, 100)  # module-level: shared by compute_curves() and plot_on_axes()
 
 GROUPS  = ["single", "multi"]
 COLORS  = {"single": "#1a9641", "multi": "#a6d96a"}
@@ -71,9 +72,11 @@ def build_vt_group_cache(vt_ids: list, domain_lookup: dict) -> dict:
 
 # ── Main ───────────────────────────────────────────────────────────────────────
 
-def main():
-    os.makedirs(OUT_DIR, exist_ok=True)
+def compute_curves():
+    """Load data and compute per-(class, domain-group) ROC fold curves.
 
+    Returns (fold_curves, all_vt_by_grp).
+    """
     print("Loading pfam_domains_cache...", flush=True)
     with open(PFAM_CACHE, "rb") as f:
         pfam = pickle.load(f)
@@ -94,7 +97,6 @@ def main():
     with open(GCV_RESULTS, "rb") as f:
         gcv_results = pickle.load(f)
 
-    FPR_GRID = np.linspace(0, 1, 100)
     fold_curves   = {c: {g: [] for g in GROUPS} for c in (1, 2, 3)}
     all_vt_by_grp = {c: {g: set() for g in GROUPS} for c in (1, 2, 3)}
 
@@ -153,9 +155,17 @@ def main():
 
         print(f"  Seed {seed}: done", flush=True)
 
-    # ── Plot ───────────────────────────────────────────────────────────────────
-    class_labels = {1: "Class 1 (both seen)", 2: "Class 2 (one seen)", 3: "Class 3 (neither seen)"}
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4.5), sharey=True)
+    return fold_curves, all_vt_by_grp
+
+
+CLASS_LABELS = {1: "Class 1 (both seen)", 2: "Class 2 (one seen)", 3: "Class 3 (neither seen)"}
+
+
+def plot_on_axes(axes, fold_curves, all_vt_by_grp):
+    """Draw the 3-panel (C1/C2/C3) single-vs-multi-domain ROC comparison onto
+    pre-supplied axes. Returns summary_rows (list[str]) for the TSV output.
+    """
+    class_labels = CLASS_LABELS
 
     summary_rows = []
     for ax, cls in zip(axes, (1, 2, 3)):
@@ -198,6 +208,16 @@ def main():
         if cls == 1:
             ax.set_ylabel("True Positive Rate", fontsize=10)
         ax.legend(loc="lower right", fontsize=8)
+
+    return summary_rows
+
+
+def main():
+    os.makedirs(OUT_DIR, exist_ok=True)
+    fold_curves, all_vt_by_grp = compute_curves()
+
+    fig, axes = plt.subplots(1, 3, figsize=(13, 4.5), sharey=True)
+    summary_rows = plot_on_axes(axes, fold_curves, all_vt_by_grp)
 
     plt.tight_layout()
     out_png = os.path.join(OUT_DIR, "protein_class_auroc_by_class.png")

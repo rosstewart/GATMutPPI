@@ -12,8 +12,8 @@ Aggregation matches compute_roc_with_variance() in roc_plots.py exactly:
   - Mean ± SEM where SEM = std / sqrt(10) (hardcoded denominator)
 
 Output:
-  results_revisions/reviewer_analyses/interface_auroc_by_class.png
-  results_revisions/reviewer_analyses/interface_auroc_summary.tsv
+  results_revisions/robustness_analyses/interface_auroc_by_class.png
+  results_revisions/robustness_analyses/interface_auroc_summary.tsv
 
 Usage:
   conda run -n ppi python src/analysis/interface_analysis.py
@@ -36,10 +36,11 @@ CV_DIR = "/home/rcstewart/gnn/ppi_interaction_loss/cv_splits"
 GRAPH_DIR = f"{_BASE}/2026/graphs"
 GCV_RESULTS = f"{_PUB}/results_revisions/macro_aucs/MutPredPPI_sahni_fragoza_megascale_all_detailed_results.pkl"
 VT_IDS_FILE = f"{CV_DIR}/sahni_fragoza_train_all_vt_ids.pkl"
-OUT_DIR = f"{_PUB}/results_revisions/reviewer_analyses"
+OUT_DIR = f"{_PUB}/results_revisions/robustness_analyses"
 N_SEEDS = 30
 MIN_N = 5  # matches roc_plots.py spirit: just require both label classes per fold
 N_SEM_DIVISOR = 10  # matches hardcoded value in roc_plots.py compute_roc_with_variance
+FPR_GRID = np.linspace(0, 1, 100)  # module-level: shared by compute_curves() and plot_on_axes()
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -99,9 +100,12 @@ def build_interface_cache(vt_ids: list) -> dict:
 
 # ── Main analysis ──────────────────────────────────────────────────────────────
 
-def main():
-    os.makedirs(OUT_DIR, exist_ok=True)
+def compute_curves():
+    """Load data and compute per-(class, group) ROC fold curves.
 
+    Returns (fold_curves, all_vt_ids_group) — same structure previously built
+    inline in main(), now reusable by combined_robustness_figure.py.
+    """
     with open(VT_IDS_FILE, "rb") as f:
         all_vt_ids = pickle.load(f)
     print(f"Loaded {len(all_vt_ids)} vt_ids")
@@ -115,7 +119,6 @@ def main():
     with open(GCV_RESULTS, "rb") as f:
         gcv_results = pickle.load(f)
 
-    FPR_GRID = np.linspace(0, 1, 100)
 
     # fold_curves[class][group] = list of per-fold interpolated TPR arrays
     fold_curves = {c: {"interface": [], "non_interface": []} for c in (1, 2, 3)}
@@ -179,12 +182,22 @@ def main():
 
         print(f"  Seed {seed}: done", flush=True)
 
-    # ── Plot ───────────────────────────────────────────────────────────────────
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4.5), sharey=True)
+    return fold_curves, all_vt_ids_group
 
-    class_labels = {1: "Class 1 (both seen)", 2: "Class 2 (one seen)", 3: "Class 3 (neither seen)"}
-    curve_colors = {"interface": "#1f77b4", "non_interface": "#aec7e8"}
-    display_names = {"interface": "Interface", "non_interface": "Non-interface"}
+
+CLASS_LABELS = {1: "Class 1 (both seen)", 2: "Class 2 (one seen)", 3: "Class 3 (neither seen)"}
+CURVE_COLORS = {"interface": "#1f77b4", "non_interface": "#aec7e8"}
+DISPLAY_NAMES = {"interface": "Interface", "non_interface": "Non-interface"}
+
+
+def plot_on_axes(axes, fold_curves, all_vt_ids_group):
+    """Draw the 3-panel (C1/C2/C3) ROC comparison onto pre-supplied axes.
+
+    Returns summary_rows (list[str]) for the TSV output.
+    """
+    class_labels = CLASS_LABELS
+    curve_colors = CURVE_COLORS
+    display_names = DISPLAY_NAMES
 
     summary_rows = []
     for ax, cls in zip(axes, (1, 2, 3)):
@@ -231,6 +244,16 @@ def main():
         if cls == 1:
             ax.set_ylabel("True Positive Rate", fontsize=10)
         ax.legend(loc="lower right", fontsize=8)
+
+    return summary_rows
+
+
+def main():
+    os.makedirs(OUT_DIR, exist_ok=True)
+    fold_curves, all_vt_ids_group = compute_curves()
+
+    fig, axes = plt.subplots(1, 3, figsize=(13, 4.5), sharey=True)
+    summary_rows = plot_on_axes(axes, fold_curves, all_vt_ids_group)
 
     plt.tight_layout()
     out_png = os.path.join(OUT_DIR, "interface_auroc_by_class.png")

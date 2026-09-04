@@ -41,11 +41,13 @@ from sklearn.preprocessing import StandardScaler
 from torch_geometric.nn import GATConv
 from torch_geometric.utils import dense_to_sparse
 
+_REPO_ROOT                 = Path(__file__).resolve().parents[2]
+_MODEL_WEIGHTS_DIR         = _REPO_ROOT / "model_weights"
 _CV_DIR                  = Path("/home/rcstewart/gnn/ppi_interaction_loss/cv_splits")
 _SCALER_PATH               = Path("/data/ross/gnn/jose_2016_lossgain_models/mutation_diff_scaler.pkl")
-_MEGASCALE_SCALER_PATH     = Path("/data/ross/ppi_lossgain/interaction_loss/megascale_preprocessed/mutation_diff_scaler.pkl")
+_MEGASCALE_SCALER_PATH     = _MODEL_WEIGHTS_DIR / "mutation_diff_scaler.pkl"
 _PRETRAINED_PATH           = Path("/data/ross/gnn/jose_2016_lossgain_models/gnn_prott5_rasp4_scaledmutprocessor_whole_train.pt")
-_MEGASCALE_PRETRAINED_PATH = Path("/data/ross/gnn/jose_2016_lossgain_models/gnn_prott5_megascale_pretrain.pt")
+_MEGASCALE_PRETRAINED_PATH = _MODEL_WEIGHTS_DIR / "gnn_prott5_megascale_pretrain.pt"
 _CD_HIT                  = "/home/rcstewart/miniconda3/envs/pytorch_env/bin/cd-hit"
 _METHOD                  = "interaction_loss"
 
@@ -161,12 +163,6 @@ DATASET_CONFIGS: dict[str, DatasetConfig] = {
         fold_splits_pat="sahni_varchamp1p_cava_train_fold_splits_{seed}.pkl",
         all_vt_ids_file="sahni_varchamp1p_cava_train_all_vt_ids.pkl",
         pair_test_classes_pat="combined_sahni_varchamp1p_cava_seq_confirmed_concat_clust_pair_test_classes_{seed}.npy",
-    ),
-    "sahni_fragoza_varchamp2026": DatasetConfig(
-        name="sahni_fragoza_varchamp2026",
-        fold_splits_pat="sahni_fragoza_varchamp2026_train_fold_splits_{seed}.pkl",
-        all_vt_ids_file="sahni_fragoza_varchamp2026_train_all_vt_ids.pkl",
-        pair_test_classes_pat="combined_sahni_fragoza_varchamp2026_pair_test_classes_{seed}.npy",
     ),
     "sahni_fragoza_varchamp_full": DatasetConfig(
         name="sahni_fragoza_varchamp_full",
@@ -661,23 +657,6 @@ def _load_varchamp2026_raw(use_wt_emb: bool = False) -> dict:
     return data
 
 
-def load_sahni_fragoza_varchamp2026(use_wt_emb: bool = False) -> dict:
-    """sahni_fragoza + 2026 VarChAMP; replaces varchamp1p+cava in the sfvc set."""
-    sf = load_sahni_fragoza(use_wt_emb=use_wt_emb)
-    vc = _load_varchamp2026_raw(use_wt_emb=use_wt_emb)
-
-    # normalize sf IDs: "A-B" → "A_B"
-    sf_new_wt = []
-    for wt_id in sf["all_wt_ids"]:
-        a, b = split_complex_id_hyphen(wt_id)
-        sf_new_wt.append(f"{a}_{b}")
-    _remap_vt_ids(sf, sf_new_wt)
-
-    data = _dedup_and_merge([sf, vc])
-    data["clusters"] = [str(c) for c in cluster_sequences(data["wt_seqs"])]
-    return data
-
-
 def load_sahni_fragoza_varchamp_full(use_wt_emb: bool = False) -> dict:
     """sahni_fragoza + VarChAMP2026 + VarChAMP1p + CAVA (all available data)."""
     sf   = load_sahni_fragoza(use_wt_emb=use_wt_emb)
@@ -867,7 +846,6 @@ def load_dataset(cfg: DatasetConfig, use_wt_emb: bool = False) -> dict:
         "sahni_fragoza":                       load_sahni_fragoza,
         "sahni_fragoza_varchamp1p_cava":       load_sahni_fragoza_varchamp1p_cava,
         "sahni_varchamp1p_cava":               load_sahni_varchamp1p_cava,
-        "sahni_fragoza_varchamp2026":          load_sahni_fragoza_varchamp2026,
         "sahni_fragoza_varchamp_full":         load_sahni_fragoza_varchamp_full,
         "sahni_fragoza_varchamp_pooled":       load_sahni_fragoza_varchamp_pooled,
         "sahni_fragoza_varchamp_full_pooled":  load_sahni_fragoza_varchamp_full_pooled,
@@ -955,6 +933,14 @@ def train_fold(
 
     # ── build model ───────────────────────────────────────────────────────────
     def _load_ckpt(path, mdl):
+        if not Path(path).exists():
+            raise FileNotFoundError(
+                f"Checkpoint not found: {path}\n"
+                "If this is the MegaScale pretrain checkpoint, either download it "
+                "into model_weights/ (see Zenodo, docs/DATA_SOURCES.md) or generate it "
+                "from scratch by running Phase 0 in docs/TRAINING.md "
+                "(preprocess_stability_data.py + pretrain_stability.py)."
+            )
         ckpt = torch.load(path, map_location=device)
         mdict = mdl.state_dict()
         mdl.load_state_dict(
