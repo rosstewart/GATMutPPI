@@ -24,6 +24,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from sklearn.metrics import roc_curve, auc
 
 _PUB = Path("/data/ross/ppi_lossgain/interaction_loss/publication")
 _CV  = Path("/home/rcstewart/gnn/ppi_interaction_loss/cv_splits")
@@ -34,12 +35,28 @@ from roc_plots import (
     plot_roc_with_confidence,
     METHOD_DISPLAY_NAMES,
     colors as METHOD_COLORS,
+    WORKING_DIR,
 )
 
 LABEL_FILE   = _CV / "sahni_fragoza_all_vt_ids_and_labels.txt"
 IPTM_PKL     = _PUB / "results_revisions" / "macro_aucs" / "iptm_sahni_fragoza_gcv_splits.pkl"
 PKL_DIR      = _PUB / "results_revisions" / "macro_aucs"
 OUT_DIR      = _PUB / "results_revisions" / "biclass_gcv"
+
+DATASET = "sahni_fragoza"
+
+# Fixed-prediction baselines (not GCV-iterated) — evaluated on the raw label-file
+# order, which SAAMBE-3D/MutPPI/MutPPIPlus/mutpred2_standalone arrays share.
+SKEMPI_METHODS = ["SAAMBE-3D", "MutPPI", "MutPPIPlus"]  # DDMutPPI excluded: API returns NaN
+
+# roc_plots.py's main() only registers these display names at runtime (line ~1083),
+# so biclass_sf_gcv.py must register them itself before calling plot_roc_with_confidence.
+METHOD_DISPLAY_NAMES.update({
+    f"mutpred2_standalone_{DATASET}": "MutPred2",
+    f"saambe_3d_{DATASET}":           "SAAMBE-3D",
+    f"mutppi_{DATASET}":              "MutPPI",
+    f"mutppiplus_{DATASET}":          "MutPPI+",
+})
 
 METHODS = [
     ("MutPredPPI_sahni_fragoza_megascale_all",   "MutPredPPI_sahni_fragoza_megascale_all_detailed_results.pkl"),
@@ -117,6 +134,105 @@ def filter_detailed_results(
     return filtered
 
 
+def load_complex_ids_raw_order(label_file: Path) -> np.ndarray:
+    """Complex_id per line of the label file, in raw file order.
+
+    The fixed-prediction baseline arrays (SAAMBE-3D, MutPPI, MutPPIPlus,
+    mutpred2_standalone) are stored in this exact order (verified empirically:
+    cross-correlations between baseline arrays under this ordering assumption
+    are all highly significant, e.g. MutPPIPlus vs SAAMBE-3D r=0.39, p=1.3e-211).
+    """
+    ids = []
+    with open(label_file) as f:
+        for line in f:
+            ids.append(line.strip().split()[0])
+    return np.array(ids)
+
+
+def filter_baseline_predictions(dataset: str, biclass_pairs: set[str],
+                                 complex_ids: np.ndarray) -> dict:
+    """Mirror roc_plots.load_baseline_predictions(), restricted to biclass pairs."""
+    baseline_results: dict = {}
+    biclass_mask_all = np.array([c in biclass_pairs for c in complex_ids])
+
+    labels_file       = os.path.join(WORKING_DIR, f"{dataset}_mutpred2_standalone_labels.npy")
+    test_classes_file = os.path.join(WORKING_DIR, f"{dataset}_SAAMBE-3D_test_classes.npy")
+    if not (os.path.exists(labels_file) and os.path.exists(test_classes_file)):
+        print("  [SKIP] baseline labels/test_classes files not found", flush=True)
+        return baseline_results
+
+    labels_all       = np.load(labels_file)
+    test_classes_all = np.load(test_classes_file)
+
+    if not (len(labels_all) == len(test_classes_all) == len(complex_ids)):
+        print(f"  [SKIP] baseline array length mismatch "
+              f"(labels={len(labels_all)}, test_classes={len(test_classes_all)}, "
+              f"complex_ids={len(complex_ids)})", flush=True)
+        return baseline_results
+
+    for method in SKEMPI_METHODS:
+        preds_file = os.path.join(WORKING_DIR, f"{dataset}_{method}_preds.npy")
+        if not os.path.exists(preds_file):
+            print(f"  [SKIP] {method}: preds file not found", flush=True)
+            continue
+        preds_all = np.load(preds_file)
+        if len(preds_all) != len(complex_ids):
+            print(f"  [SKIP] {method}: preds length {len(preds_all)} != "
+                  f"complex_ids length {len(complex_ids)}", flush=True)
+            continue
+
+        method_key = f"{method.replace('-', '_').lower()}_{dataset}"
+        baseline_results[method_key] = {}
+        n_biclass_total = 0
+        for tc in (1, 2, 3):
+            mask     = (test_classes_all == tc) & biclass_mask_all
+            preds_c  = preds_all[mask]
+            labels_c = labels_all[mask]
+            valid    = ~np.isnan(preds_c)
+            preds_c  = preds_c[valid]
+            labels_c = labels_c[valid]
+            n_biclass_total += len(preds_c)
+
+            if len(preds_c) == 0 or len(np.unique(labels_c)) < 2:
+                baseline_results[method_key][f"class_{tc}"] = {
+                    "fprs": [], "tprs": [], "aucs": [], "ns": [0]
+                }
+                continue
+
+            fpr, tpr, _ = roc_curve(labels_c, preds_c)
+            score = auc(fpr, tpr)
+            baseline_results[method_key][f"class_{tc}"] = {
+                "fprs": [fpr], "tprs": [tpr], "aucs": [score], "ns": [len(preds_c)]
+            }
+        print(f"  {method}: biclass n={n_biclass_total:,} "
+              f"(C3 AUC={baseline_results[method_key]['class_3']['aucs'] or 'n/a'})",
+              flush=True)
+
+    preds_file = os.path.join(WORKING_DIR, f"{dataset}_mutpred2_standalone_preds.npy")
+    if os.path.exists(preds_file):
+        preds_all = np.load(preds_file)
+        if len(preds_all) == len(complex_ids):
+            mask     = biclass_mask_all & ~np.isnan(preds_all) & (labels_all >= 0)
+            preds_c  = preds_all[mask]
+            labels_c = labels_all[mask]
+            method_key = f"mutpred2_standalone_{dataset}"
+            if len(preds_c) > 0 and len(np.unique(labels_c)) >= 2:
+                fpr, tpr, _ = roc_curve(labels_c, preds_c)
+                score = auc(fpr, tpr)
+                baseline_results[method_key] = {
+                    f"class_{c}": {"fprs": [fpr], "tprs": [tpr], "aucs": [score],
+                                   "ns": [len(preds_c)]}
+                    for c in [1, 2, 3]
+                }
+                print(f"  mutpred2_standalone: biclass n={len(preds_c):,}  AUC={score:.3f}",
+                      flush=True)
+        else:
+            print(f"  [SKIP] mutpred2_standalone: preds length {len(preds_all)} != "
+                  f"complex_ids length {len(complex_ids)}", flush=True)
+
+    return baseline_results
+
+
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -151,6 +267,12 @@ def main() -> None:
         print(f"  C3 AUROC: {mean_c3:.3f} ± {std_c3:.3f}  (n_curves={n_curves_c3})",
               flush=True)
         results_dict[method_key] = roc
+
+    print(f"\nProcessing fixed-prediction baselines (SAAMBE-3D, MutPPI, MutPPI+, MutPred2)...",
+          flush=True)
+    complex_ids = load_complex_ids_raw_order(LABEL_FILE)
+    baseline_results = filter_baseline_predictions(DATASET, biclass_pairs, complex_ids)
+    results_dict.update(baseline_results)
 
     if not results_dict:
         print("ERROR: No methods produced valid results.", flush=True)

@@ -44,5 +44,14 @@ figures/brca1_extra/
 ross_MutInt_group_cross_validation_example_results.pkl
 .claude/
 
+# Archived obsolete/superseded content (not part of the pipeline)
+archive/
+
+# Internal Zenodo packaging checklist (not for public docs/)
+ZENODO_CHECKLIST.md
+
 # Example CIF (large binary — download from Zenodo)
 example/af3_models/
+
+# Figures
+figures/

@@ -11,12 +11,17 @@ Edgotype classification (per unique variant, across all tested partners):
   Edgetic         : mixed
 
 Output directory structure:
-  {output_dir}/clinvar/    benign, pathogenic, vus
+  {output_dir}/clinvar/    benign, pathogenic, vus, rare_benign, ar_pathogenic, ad_pathogenic
   {output_dir}/gnomad/     gnomad, gnomad_upper_af_1e-06, ..., gnomad_upper_af_0.1
-  {output_dir}/hgmd/       hgmd
+  {output_dir}/hgmd/       hgmd, ar_hgmd, ad_hgmd
   {output_dir}/cosmic/     cosmic_single, cosmic_2+, ..., cosmic_32+,
                            cosmic_onco_*, cosmic_tsg_*
   {output_dir}/fu_autism/  fu_autism
+
+ar_pathogenic/ad_pathogenic and ar_hgmd/ad_hgmd stratify Pathogenic/HGMD variants by
+whether their gene has an autosomal-recessive-only or autosomal-dominant-only mode of
+inheritance (ClinGen Gene-Disease Validity curations; see build_ar_ad_gene_sets.py).
+These require /data/ross/ppi_lossgain/interaction_loss/clingen_ar_ad_uniprot_sets.pkl.
 """
 
 import argparse
@@ -65,6 +70,8 @@ COSMIC_TUMOR_SITE_FILE = f"{_BASE}/cosmic/vt_to_tumor_site.pkl"  # recurrence = 
 COSMIC_ONCO_TSG_FILE   = f"{_BASE}/cosmic_mutations/onco_tsg_dict.pkl"
 COSMIC_RECURRENCE_BINS = [1, 2, 4, 8, 16, 32]  # "single" = 1; "2+" = >=2, etc.
 
+AR_AD_UNIPROT_FILE = f"{_BASE}/clingen_ar_ad_uniprot_sets.pkl"  # {"AR": set[uniprot], "AD": set[uniprot]}
+
 
 # ── core helpers ───────────────────────────────────────────────────────────────
 
@@ -104,6 +111,15 @@ def classify_edgotype(scores, threshold=0.5):
         return "Quasi-wild-type"
     else:
         return "Edgetic"
+
+
+def load_ar_ad_uniprots():
+    """Load mutually-exclusive AR-only/AD-only UniProt sets (see build_ar_ad_gene_sets.py)."""
+    if not os.path.exists(AR_AD_UNIPROT_FILE):
+        return None, None
+    with open(AR_AD_UNIPROT_FILE, "rb") as f:
+        d = pickle.load(f)
+    return d.get("AR", set()), d.get("AD", set())
 
 
 def build_arrays(grouped, subset, threshold=0.5, min_partners=1):
@@ -180,6 +196,21 @@ def process_clinvar(tsv_path, out_dir, threshold, min_partners):
     else:
         print("  rare_benign: no variants found (check BENIGN_AF_FILE path)")
 
+    # AR-only / AD-only disease-gene stratification of Pathogenic variants
+    ar_uniprots, ad_uniprots = load_ar_ad_uniprots()
+    if ar_uniprots is None:
+        print(f"  ar_pathogenic/ad_pathogenic: skipped, {AR_AD_UNIPROT_FILE} not found "
+              "(run build_ar_ad_gene_sets.py first)")
+        return
+    with open(SUBSET_FILES["clinvar"]["pathogenic"], "rb") as f:
+        pathogenic_subset = pickle.load(f)
+    ar_pathogenic = {(u, v, p) for (u, v, p) in pathogenic_subset if u in ar_uniprots}
+    ad_pathogenic = {(u, v, p) for (u, v, p) in pathogenic_subset if u in ad_uniprots}
+    ec, pl = build_arrays(grouped, ar_pathogenic, threshold, min_partners)
+    save_outputs(out_dir, "ar_pathogenic", ec, pl)
+    ec, pl = build_arrays(grouped, ad_pathogenic, threshold, min_partners)
+    save_outputs(out_dir, "ad_pathogenic", ec, pl)
+
 
 def process_hgmd(tsv_path, out_dir, threshold, min_partners):
     print("Processing HGMD...")
@@ -189,6 +220,19 @@ def process_hgmd(tsv_path, out_dir, threshold, min_partners):
         subset = pickle.load(f)
     ec, pl = build_arrays(grouped, subset, threshold, min_partners)
     save_outputs(out_dir, "hgmd", ec, pl)
+
+    # AR-only / AD-only disease-gene stratification of HGMD variants
+    ar_uniprots, ad_uniprots = load_ar_ad_uniprots()
+    if ar_uniprots is None:
+        print(f"  ar_hgmd/ad_hgmd: skipped, {AR_AD_UNIPROT_FILE} not found "
+              "(run build_ar_ad_gene_sets.py first)")
+        return
+    ar_hgmd = {(u, v, p) for (u, v, p) in subset if u in ar_uniprots}
+    ad_hgmd = {(u, v, p) for (u, v, p) in subset if u in ad_uniprots}
+    ec, pl = build_arrays(grouped, ar_hgmd, threshold, min_partners)
+    save_outputs(out_dir, "ar_hgmd", ec, pl)
+    ec, pl = build_arrays(grouped, ad_hgmd, threshold, min_partners)
+    save_outputs(out_dir, "ad_hgmd", ec, pl)
 
 
 def process_autism(tsv_path, out_dir, threshold, min_partners):

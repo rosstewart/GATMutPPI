@@ -146,16 +146,20 @@ dataset_labels = {
     "cosmic_tsg_8+": "Recurrence ≥ 8",
     "cosmic_tsg_16+": "Recurrence ≥ 16",
     "cosmic_tsg_32+": "Recurrence ≥ 32",
+    "ar_pathogenic": "AR",
+    "ad_pathogenic": "AD",
+    "ar_hgmd": "AR",
+    "ad_hgmd": "AD",
 }
 
 # dataset_enrichment_labels: short display labels for enrichment plot x-axis
 dataset_enrichment_labels = {
-    "hgmd": "HGMD",
+    "hgmd": ["HGMD", "AR", "AD"],
     "gnomad_af": ["AF ≤ 1e-6", "1e-6 < AF ≤ 1e-5", "1e-5 < AF ≤ 1e-4",
                   "1e-4 < AF ≤ 1e-3", "1e-3 < AF ≤ 1e-2", "1e-2 < AF"],
     "fu_autism": "ASD Case",
     "neurodev": ["NDD Case", "NDD Control"],
-    "clinvar": ["Rare Benign", "Benign", "Pathogenic", "VUS"],
+    "clinvar": ["Rare Benign", "Benign", "Pathogenic", "VUS", "Pathogenic AR", "Pathogenic AD"],
     "cosmic": ["Single", "≥2", "≥4", "≥8", "≥16", "≥32"],
     "cosmic_onco": ["Single", "≥2", "≥4", "≥8", "≥16", "≥32"],
     "cosmic_tsg": ["Single", "≥2", "≥4", "≥8", "≥16", "≥32"],
@@ -163,7 +167,7 @@ dataset_enrichment_labels = {
 
 # Configurations: (base_dataset, [datasets], stats_loc, save_name, alpha, n_partners_suffix)
 CONFIGURATIONS = [
-    ("hgmd", ["hgmd"], "upper right", "hgmd", None, ""),
+    ("hgmd", ["hgmd", "ar_hgmd", "ad_hgmd"], "upper right", "hgmd", None, ""),
     ("gnomad", ["gnomad"], "upper right", "gnomad", None, ""),
     ("gnomad", ["gnomad_disease_gene", "gnomad_not_disease_gene"],
      "upper right", "gnomad_disease_gene", None, ""),
@@ -173,7 +177,8 @@ CONFIGURATIONS = [
      "upper right", "gnomad_af", None, "_af"),
     ("fu_autism", ["fu_autism"], "upper right", "fu_autism", None, ""),
     ("neurodev", ["ndd_case", "ndd_control"], "upper right", "neurodev", None, ""),
-    ("clinvar", ["rare_benign", "benign", "pathogenic", "vus"], "upper right", "clinvar", None, ""),
+    ("clinvar", ["rare_benign", "benign", "pathogenic", "vus", "ar_pathogenic", "ad_pathogenic"],
+     "upper right", "clinvar", None, ""),
     ("cosmic", ["cosmic_single", "cosmic_2+", "cosmic_4+", "cosmic_8+",
                 "cosmic_16+", "cosmic_32+"], "upper right", "cosmic", None, ""),
     ("cosmic", ["cosmic_onco_single", "cosmic_onco_2+", "cosmic_onco_4+",
@@ -362,6 +367,8 @@ def _get_enrich_color(dataset, label):
         "1e-5 < AF ≤ 1e-4": "#FFCA28", "1e-4 < AF ≤ 1e-3": "#9CCC65",
         "1e-3 < AF ≤ 1e-2": "#66BB6A", "1e-2 < AF": "#4CAF50",
         "ASD Case": "#FF9800", "NDD Case": "#9C27B0", "NDD Control": "#607D8B",
+        "AR": "#00897B", "AD": "#FFB300",
+        "Pathogenic AR": "#00897B", "Pathogenic AD": "#FFB300",
     }
     return color_map.get(label, "#666666")
 
@@ -402,7 +409,8 @@ def plot_enrichment_bootstrap(bootstrap_densities, sample_ns, output_dir,
     component_indices = [1, 2]
 
     dataset_display_names = {
-        "clinvar": "ClinVar", "cosmic": "COSMIC",
+        "clinvar": "ClinVar",
+        "cosmic": "COSMIC",
         "cosmic_onco": "COSMIC (Onco)", "cosmic_tsg": "COSMIC (TSG)",
         "hgmd": "HGMD", "gnomad_af": "gnomAD",
         "neurodev": "NDD", "fu_autism": "ASD",
