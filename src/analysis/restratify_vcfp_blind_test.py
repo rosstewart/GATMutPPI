@@ -22,7 +22,7 @@ import pandas as pd
 
 _PUB    = "/data/ross/ppi_lossgain/interaction_loss/publication"
 _EVAL   = os.path.join(_PUB, "results/varchamp_seqcnf_newvar_eval")
-_CSV    = "/home/rcstewart/mutppi/benchmark/training_data.csv"
+_CSV    = "/data/ross/ppi_lossgain/interaction_loss/publication/data_caches/training_data_internal.csv"
 
 # All method descriptions that have VCFP blind test arrays
 METHODS = [
@@ -147,6 +147,33 @@ def build_ref_vt_ids(ref_method: str) -> set:
         if os.path.exists(vf):
             ref_vts.update(np.load(vf, allow_pickle=True).tolist())
     return ref_vts
+
+
+def restratify_one_method(method: str, dry_run: bool = False) -> None:
+    """Restratify a single method's VCFP arrays using the canonical sf_proteins.
+
+    Builds the same context main() builds (sf_proteins, SKEMPI train proteins,
+    the MutPred-PPI reference vt_id set), then re-splits just `method`'s
+    per-class npy files. Importable so callers (e.g. run_vcfp_blind_test.py)
+    can restratify one method's arrays without invoking every method in
+    METHODS. `method` need not be a member of METHODS — it uses the same
+    SKEMPI_METHODS / _REF membership checks as main() to decide which
+    canonical protein set and reference test-set intersection to apply.
+    """
+    sf_proteins     = build_sf_proteins()
+    skempi_proteins = set(np.load(_SAAMBE_UNIPROTS_F, allow_pickle=True).tolist())
+
+    _REF = "MutPred-PPI (megascale_all, all-data) (varchamp_full_pooled)"
+    ref_vt_ids = build_ref_vt_ids(_REF)
+
+    if method in SKEMPI_METHODS:
+        train_proteins = skempi_proteins
+        use_ref = set()   # SKEMPI methods have different test sets; don't filter
+    else:
+        train_proteins = sf_proteins
+        use_ref = ref_vt_ids if method != _REF else set()
+
+    restratify(method, train_proteins, use_ref, dry_run)
 
 
 def main():

@@ -68,6 +68,9 @@ python src/inference/01_make_contact_graphs_and_fasta.py working_dir/ mmcif_dir/
 python src/inference/02_run_mutpred-ppi_inference.py working_dir/
 ```
 
+For a small, ready-to-run example (no data download required), see
+[`examples/inference_quickstart/`](examples/inference_quickstart/).
+
 ## Data Availability
 
 Pre-trained model weights, Sahni+Fragoza training data (post-AF3 structure filtering, as used in Fig 3 GCV), and AF3 complex structures are available on Zenodo:
@@ -97,7 +100,9 @@ MutPred-PPI/
 │   ├── variant_db_inference/ # Large-scale variant DB scoring
 │   └── analysis/            # Figure generation + paper analyses
 ├── figures/                 # LaTeX table outputs + figure symlinks (generated)
-├── example/                 # Minimal worked example inputs
+├── weights/                 # Model checkpoints (see docs/TRAINING.md)
+├── example/                 # Minimal worked example inputs (docs/INFERENCE.md)
+├── examples/                # Small, runnable end-to-end reproducibility checks
 ├── docs/                    # Detailed training/inference/reproduction guides
 ├── LICENSE
 └── README.md

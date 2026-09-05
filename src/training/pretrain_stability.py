@@ -2,13 +2,13 @@
 """Pretrain GAT_mut_processor for ddG stability regression.
 
 Uses data from preprocess_stability_data.py.
-Outputs a .pt state-dict compatible with _PRETRAINED_PATH in mutpred_ppi_gcv_iter.py.
+Outputs a .pt state-dict compatible with _MEGASCALE_PRETRAINED_PATH in mutpred_ppi_cv.py.
 
 Usage:
     python pretrain_stability.py \\
-        --data     /data/ross/.../megascale_preprocessed/preprocessed.pkl \\
-        --scaler   /data/ross/.../megascale_preprocessed/mutation_diff_scaler.pkl \\
-        --outmodel /data/ross/gnn/jose_2016_lossgain_models/gnn_prott5_megascale_pretrain.pt \\
+        --data     megascale_preprocessed/preprocessed.pkl \\
+        --scaler   weights/mutation_diff_scaler.pkl \\
+        --outmodel weights/MutPred-PPI_stability_pretrain.pt \\
         --device   cuda:0
 """
 

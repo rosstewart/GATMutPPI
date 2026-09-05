@@ -16,6 +16,9 @@ Output vt_ids use canonical 0-based format: "UNIPROT1 UNIPROT2 MUT_0based"
 
 22 entries shared between VC1p and CAVA are deduplicated.
 
+`run()` is importable (e.g. from src/evaluation/run_vcfp_blind_test.py) and
+returns the method description string used for the saved npy files.
+
 Usage:
     conda run -n ppi python supplement_mint_vc1pcava.py [--predictor seq_diff|site_diff]
 """
@@ -37,46 +40,18 @@ import predictors.mint_mlp as _mint_mod  # noqa: E402
 from predictors.mint_mlp import MINTSeqDiff, MINTSiteDiff  # noqa: E402
 from predictors import nn_base  # noqa: E402
 
-from mutpred_ppi_cv import (  # noqa: E402
-    _load_varchamp1p_raw, _load_cava_raw,
-    get_gene_name, split_wt_id_underscore,
+from vcfp_common import (  # noqa: E402
+    build_sf_proteins, load_sf_train_df, load_vc1pcava_sources,
+    iter_vc1pcava_entries, save_vc1pcava_supplement,
 )
 
-_TRAINING_CSV = Path("/home/rcstewart/mutppi/benchmark/training_data.csv")
-_GCV_CACHE    = Path(__file__).resolve().parents[2] / "data_caches" / "mint_cache.pkl"
-_VC1P_MAP     = Path("/data/ross/ppi_lossgain/interaction_loss/home/varchamp1p/gene_symbol_to_uniprot.pkl")
-_CAVA_MAP     = Path("/data/ross/ppi_lossgain/interaction_loss/home/cava/gene_symbol_to_uniprot.pkl")
-_OUT_DIR      = Path(
-    "/data/ross/ppi_lossgain/interaction_loss/publication/results/varchamp_seqcnf_newvar_eval"
-)
+_GCV_CACHE = Path(__file__).resolve().parents[2] / "data_caches" / "mint_cache.pkl"
 
 _DESCRIPTIONS = {
     "seq_diff":  "MINT_seq_diff (Sahni+Fragoza train) (varchamp_full_pooled)",
     "site_diff": "MINT_site_diff (Sahni+Fragoza train) (varchamp_full_pooled)",
 }
 _PREDICTOR_MAP = {"seq_diff": MINTSeqDiff, "site_diff": MINTSiteDiff}
-
-
-def classify(u1: str, u2: str, sf_proteins: set[str]) -> int:
-    a_in = u1 in sf_proteins
-    b_in = u2 in sf_proteins
-    if a_in and b_in:
-        return 1
-    if a_in or b_in:
-        return 2
-    return 3
-
-
-def build_sf_proteins() -> set[str]:
-    df = pd.read_csv(_TRAINING_CSV)
-    sf = df["dataset"].str.contains("Sahni") | df["dataset"].str.contains("Fragoza")
-    return set(df.loc[sf, "interactor"]) | set(df.loc[sf, "partner"])
-
-
-def load_sf_train_df() -> pd.DataFrame:
-    df = pd.read_csv(_TRAINING_CSV)
-    sf = df["dataset"].str.contains("Sahni") | df["dataset"].str.contains("Fragoza")
-    return df[sf].copy().reset_index(drop=True)
 
 
 def install_mint_cache(predictor: str) -> None:
@@ -100,77 +75,67 @@ def build_vc1pcava_test_df(
     Returns (df, canonical_vt_ids) where df has 1-based mutations (for MINT cache
     lookup) and canonical_vt_ids has 0-based mutations (for output npy files).
     """
-    seen: set[str] = set()
     rows = []
     canonical_vt_ids = []
-    n_dup = n_miss = 0
 
-    for data, gs2u in sources:
-        for i, vt_id in enumerate(data["all_vt_ids"]):
-            wt_id   = data["all_wt_ids"][i]
-            variant = vt_id.split(" ", 1)[1]   # e.g. "D220V" (0-based)
-            pos_0   = int(variant[1:-1])
+    for data, i, wt_id, variant, u1, u2, canon_id, label, c in iter_vc1pcava_entries(
+        sources, sf_proteins
+    ):
+        pos_0 = int(variant[1:-1])
+        mut_1based = f"{variant[0]}{pos_0 + 1}{variant[-1]}"  # for MINT cache lookup
 
-            try:
-                a, b = split_wt_id_underscore(wt_id)
-                u1 = gs2u[get_gene_name(a)]
-                u2 = gs2u[get_gene_name(b)]
-            except (KeyError, ValueError):
-                n_miss += 1
-                continue
+        rows.append({
+            "interactor": u1,
+            "partner":    u2,
+            "mutation":   mut_1based,
+            "perturbed":  label,
+            "class":      c,
+        })
+        canonical_vt_ids.append(canon_id)
 
-            canon_id = f"{u1} {u2} {variant}"   # 0-based, canonical output format
-            if canon_id in seen:
-                n_dup += 1
-                continue
-            seen.add(canon_id)
-
-            mut_1based = f"{variant[0]}{pos_0 + 1}{variant[-1]}"  # for MINT cache lookup
-            label = 1 if len(data["pos_labels"][i]) > 0 else 0
-
-            rows.append({
-                "interactor": u1,
-                "partner":    u2,
-                "mutation":   mut_1based,
-                "perturbed":  label,
-                "class":      classify(u1, u2, sf_proteins),
-            })
-            canonical_vt_ids.append(canon_id)
-
-    print(f"  Unique entries: {len(rows)}  dup_skip={n_dup}  map_miss={n_miss}", flush=True)
+    print(f"  Unique entries: {len(rows)}", flush=True)
     df = pd.DataFrame(rows)
     return df, canonical_vt_ids
 
 
-def save_stratified(
-    scores: np.ndarray,
-    df: pd.DataFrame,
-    canonical_vt_ids: list[str],
-    description: str,
-    out_dir: Path,
-) -> None:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    labels   = df["perturbed"].values.astype(int)
-    classes  = df["class"].values
-    vt_ids   = np.array(canonical_vt_ids)
-    nan_mask = ~np.isnan(scores)
+def run(predictor: str = "seq_diff", seed: int = 42) -> str:
+    """Train/predict MINT on VC1p+CAVA entries and save the vc1pcava supplement.
 
-    n_nan = int(np.isnan(scores).sum())
-    if n_nan:
-        print(f"  WARNING: {n_nan} NaN scores (cache misses)", flush=True)
+    Returns the method description string (also the key expected by
+    merge_vc1pcava_into_main.merge_method() / restratify_vcfp_blind_test.restratify_one_method()).
+    """
+    t0 = time.time()
+    description = _DESCRIPTIONS[predictor]
 
-    print(f"Writing stratified outputs → {out_dir}", flush=True)
-    for c_idx, c_label in enumerate([1, 2, 3]):
-        mask  = (classes == c_label) & nan_mask
-        p_sub = scores[mask].astype(np.float32)
-        l_sub = labels[mask]
-        v_sub = vt_ids[mask]
-        np.save(out_dir / f"{description}_vc1pcava_c{c_label}_preds.npy",  p_sub)
-        np.save(out_dir / f"{description}_vc1pcava_c{c_label}_labels.npy", l_sub)
-        np.save(out_dir / f"{description}_vc1pcava_c{c_label}_vt_ids.npy", v_sub)
-        from sklearn.metrics import roc_auc_score
-        auc = roc_auc_score(l_sub, p_sub) if len(np.unique(l_sub)) > 1 else float("nan")
-        print(f"  C{c_label}: n={len(v_sub)} (pos={int((l_sub==1).sum())}, neg={int((l_sub==0).sum())}) AUC={auc:.4f}", flush=True)
+    install_mint_cache(predictor)
+
+    print("Building SF protein set…", flush=True)
+    sf_proteins = build_sf_proteins()
+    print(f"  {len(sf_proteins)} SF UniProt proteins", flush=True)
+
+    sources = load_vc1pcava_sources()
+
+    print("\nBuilding test DataFrame (UniProt remap + dedup)…", flush=True)
+    test_df, canonical_vt_ids = build_vc1pcava_test_df(sources, sf_proteins)
+
+    print("\nLoading SF training data…", flush=True)
+    train_df = load_sf_train_df()
+    print(f"  SF train: {len(train_df)} entries", flush=True)
+
+    PredClass = _PREDICTOR_MAP[predictor]
+    print(f"\nTraining {PredClass().name} on {len(train_df)} rows (seed={seed})…", flush=True)
+    pred = PredClass(seed=seed)
+    pred.fit(train_df)
+
+    print(f"\nPredicting on {len(test_df)} vc1pcava entries…", flush=True)
+    scores = pred.predict(test_df).astype(np.float32)
+
+    result = save_vc1pcava_supplement(
+        scores, test_df["perturbed"].values.astype(int), np.array(canonical_vt_ids),
+        test_df["class"].values, description,
+    )
+    print(f"\nDone in {(time.time() - t0)/60:.1f} min", flush=True)
+    return result
 
 
 def main() -> None:
@@ -178,48 +143,7 @@ def main() -> None:
     ap.add_argument("--predictor", default="seq_diff", choices=("seq_diff", "site_diff"))
     ap.add_argument("--seed", type=int, default=42)
     args = ap.parse_args()
-
-    t0 = time.time()
-    description = _DESCRIPTIONS[args.predictor]
-
-    install_mint_cache(args.predictor)
-
-    print("Building SF protein set…", flush=True)
-    sf_proteins = build_sf_proteins()
-    print(f"  {len(sf_proteins)} SF UniProt proteins", flush=True)
-
-    print("Loading UniProt maps…", flush=True)
-    vc1p_gs2u = pickle.load(open(_VC1P_MAP, "rb"))
-    cava_gs2u = pickle.load(open(_CAVA_MAP, "rb"))
-
-    print("Loading VC1p data…", flush=True)
-    vc1p = _load_varchamp1p_raw()
-    print(f"  {len(vc1p['all_vt_ids'])} entries", flush=True)
-
-    print("Loading CAVA data…", flush=True)
-    cava = _load_cava_raw()
-    print(f"  {len(cava['all_vt_ids'])} entries", flush=True)
-
-    print("\nBuilding test DataFrame (UniProt remap + dedup)…", flush=True)
-    test_df, canonical_vt_ids = build_vc1pcava_test_df(
-        [(vc1p, vc1p_gs2u), (cava, cava_gs2u)],
-        sf_proteins,
-    )
-
-    print("\nLoading SF training data…", flush=True)
-    train_df = load_sf_train_df()
-    print(f"  SF train: {len(train_df)} entries", flush=True)
-
-    PredClass = _PREDICTOR_MAP[args.predictor]
-    print(f"\nTraining {PredClass().name} on {len(train_df)} rows (seed={args.seed})…", flush=True)
-    predictor = PredClass(seed=args.seed)
-    predictor.fit(train_df)
-
-    print(f"\nPredicting on {len(test_df)} vc1pcava entries…", flush=True)
-    scores = predictor.predict(test_df).astype(np.float32)
-
-    save_stratified(scores, test_df, canonical_vt_ids, description, _OUT_DIR)
-    print(f"\nDone in {(time.time() - t0)/60:.1f} min", flush=True)
+    run(predictor=args.predictor, seed=args.seed)
 
 
 if __name__ == "__main__":

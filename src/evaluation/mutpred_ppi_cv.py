@@ -42,12 +42,12 @@ from torch_geometric.nn import GATConv
 from torch_geometric.utils import dense_to_sparse
 
 _REPO_ROOT                 = Path(__file__).resolve().parents[2]
-_MODEL_WEIGHTS_DIR         = _REPO_ROOT / "model_weights"
+_MODEL_WEIGHTS_DIR         = _REPO_ROOT / "weights"
 _CV_DIR                  = Path("/home/rcstewart/gnn/ppi_interaction_loss/cv_splits")
-_SCALER_PATH               = Path("/data/ross/gnn/jose_2016_lossgain_models/mutation_diff_scaler.pkl")
+_V1_0_SCALER_PATH          = _MODEL_WEIGHTS_DIR / "v1_0" / "mutation_diff_scaler_v1_0.pkl"
 _MEGASCALE_SCALER_PATH     = _MODEL_WEIGHTS_DIR / "mutation_diff_scaler.pkl"
-_PRETRAINED_PATH           = Path("/data/ross/gnn/jose_2016_lossgain_models/gnn_prott5_rasp4_scaledmutprocessor_whole_train.pt")
-_MEGASCALE_PRETRAINED_PATH = _MODEL_WEIGHTS_DIR / "gnn_prott5_megascale_pretrain.pt"
+_V1_0_PRETRAINED_PATH      = _MODEL_WEIGHTS_DIR / "v1_0" / "MutPred-PPI_v1_0.pt"
+_MEGASCALE_PRETRAINED_PATH = _MODEL_WEIGHTS_DIR / "MutPred-PPI_stability_pretrain.pt"
 _CD_HIT                  = "/home/rcstewart/miniconda3/envs/pytorch_env/bin/cd-hit"
 _METHOD                  = "interaction_loss"
 
@@ -682,7 +682,7 @@ def _load_varchamp_pooled_raw(use_wt_emb: bool = False) -> dict:
     T5 pkl keys: {INTERACTOR} (WT), {INTERACTOR}_{mutation} (mutant, e.g. O00189_E80K)
     Labels: perturbed=True → disrupted (pos, y=1), perturbed=False → maintained (neg, y=0).
     """
-    _CSV      = "/home/rcstewart/mutppi/benchmark/training_data.csv"
+    _CSV      = "/data/ross/ppi_lossgain/interaction_loss/publication/data_caches/training_data_internal.csv"
     _T5_PKL   = "/data/ross/ppi_lossgain/interaction_loss/varchamp_pooled/varchamp_pooled_t5_embs.pkl"
     _GRAPH_DIR = "/data/ross/ppi_lossgain/interaction_loss/varchamp_pooled/af3_graphs"
 
@@ -937,8 +937,8 @@ def train_fold(
             raise FileNotFoundError(
                 f"Checkpoint not found: {path}\n"
                 "If this is the MegaScale pretrain checkpoint, either download it "
-                "into model_weights/ (see Zenodo, docs/DATA_SOURCES.md) or generate it "
-                "from scratch by running Phase 0 in docs/TRAINING.md "
+                "into weights/ (see Zenodo, docs/DATA_SOURCES.md) or generate it "
+                "from scratch: see 'Stability Pretraining' in docs/TRAINING.md "
                 "(preprocess_stability_data.py + pretrain_stability.py)."
             )
         ckpt = torch.load(path, map_location=device)
@@ -967,7 +967,7 @@ def train_fold(
         # of the checkpoint source.  Layers that *do* transfer: mutation_diff_processor,
         # complex_gat2, binding_predictor.
         if ablation in ("full", "full_all"):
-            _load_ckpt(_PRETRAINED_PATH, model)
+            _load_ckpt(_V1_0_PRETRAINED_PATH, model)
         elif ablation in ("megascale", "megascale_freeze_diff", "megascale_all",
                           "megascale_head", "megascale_all_wt-emb"):
             _load_ckpt(_MEGASCALE_PRETRAINED_PATH, model)
@@ -1259,7 +1259,7 @@ def run(args: argparse.Namespace) -> None:
     if args.ablation in _MEGASCALE_ABLATIONS:
         prefit_scaler = joblib.load(_MEGASCALE_SCALER_PATH)
     elif args.ablation != "scratch":
-        prefit_scaler = joblib.load(_SCALER_PATH)
+        prefit_scaler = joblib.load(_V1_0_SCALER_PATH)
 
     X             = ordered["prott5_embeddings"]
     edge_mats     = ordered["edge_mats"]

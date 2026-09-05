@@ -28,7 +28,7 @@ import matplotlib.ticker as mticker
 
 # ── constants ──────────────────────────────────────────────────────────────────
 
-TRAINING_CSV   = "/home/rcstewart/mutppi/benchmark/training_data.csv"
+TRAINING_CSV   = "/data/ross/ppi_lossgain/interaction_loss/publication/data_caches/training_data_internal.csv"
 SFVC2026_CSV   = "/data/ross/ppi_lossgain/interaction_loss/2026/sfvc2026_labeled_data.csv"
 
 DATASET_MAP = {

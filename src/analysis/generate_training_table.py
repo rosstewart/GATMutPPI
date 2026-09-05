@@ -14,7 +14,7 @@ import pandas as pd
 _PUB    = Path("/data/ross/ppi_lossgain/interaction_loss/publication")
 _MS     = Path("/data/ross/ppi_lossgain/interaction_loss/megascale_preprocessed")
 _CV     = Path("/home/rcstewart/gnn/ppi_interaction_loss/cv_splits")
-_TRAIN  = Path("/home/rcstewart/mutppi/benchmark/training_data.csv")
+_TRAIN  = Path("/data/ross/ppi_lossgain/interaction_loss/publication/data_caches/training_data_internal.csv")
 _OUT    = _PUB / "figures" / "training_data_table.tex"
 
 _SF_LABELS   = _CV / "sahni_fragoza_all_vt_ids_and_labels.txt"

@@ -33,7 +33,7 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger("pooled_t5")
 
 TRANSFORMER_LINK = "Rostlab/prot_t5_xl_half_uniref50-enc"
-TRAINING_CSV = "/home/rcstewart/mutppi/benchmark/training_data.csv"
+TRAINING_CSV = "/data/ross/ppi_lossgain/interaction_loss/publication/data_caches/training_data_internal.csv"
 MAX_RESIDUES = 4000
 MAX_SEQ_LEN = 1000
 MAX_BATCH = 100

@@ -37,10 +37,8 @@ _THIS_DIR = Path(__file__).resolve().parent
 _PUB = _THIS_DIR.parent.parent
 _BASE = Path("/data/ross/ppi_lossgain/interaction_loss")
 
-_MEGASCALE_PRETRAINED = Path(
-    "/data/ross/gnn/jose_2016_lossgain_models/gnn_prott5_megascale_pretrain.pt"
-)
-_SCALER_PATH = _BASE / "megascale_preprocessed" / "mutation_diff_scaler.pkl"
+_MEGASCALE_PRETRAINED = _PUB / "weights" / "MutPred-PPI_stability_pretrain.pt"
+_SCALER_PATH = _PUB / "weights" / "mutation_diff_scaler.pkl"
 _OUT_DIR = _PUB / "results_revisions" / "variant_dbs_stability"
 
 DATASET_CONFIGS = {

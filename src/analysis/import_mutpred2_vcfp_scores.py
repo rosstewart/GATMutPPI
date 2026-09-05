@@ -1,25 +1,36 @@
 #!/usr/bin/env python3
-"""Parse MutPred2 output CSV for the vc1pcava supplement and save per-class npy arrays.
+"""Import MutPred2 blind-test scores for the new VCFP entries into the main arrays.
 
-The supplement covers the 2,936 new VCFP entries (vc1pcava) that were absent from the
-original MutPred2 blind test. MutPred2 was run on:
-  data/mutpred2_vc1pcava_supplement_input.fasta
+MutPred2 has no trainable model to run in-repo — it's an external tool whose
+output is a CSV of (protein, mutation, score) scored offline. This script
+parses that CSV, covers the ~2,936 new VCFP entries (VC1p+CAVA, UniProt-remapped)
+that were absent from the original MutPred2 blind test, and then automatically
+merges the result into the main MutPred2 VCFP arrays and restratifies C1/C2/C3
+classification — the same one-command experience as
+src/evaluation/run_vcfp_blind_test.py provides for the other methods.
 
-The input FASTA uses 1-based positions. The blind test vt_ids use 0-based positions.
-This script converts back to match vt_ids when looking up scores.
-
-After running this script, run src/analysis/merge_vc1pcava_into_main.py to merge the
-supplement into the main MutPred2 VCFP blind test arrays.
+The input FASTA (data/mutpred2_vc1pcava_supplement_input.fasta, used to
+generate the externally-run CSV) uses 1-based positions. The blind test
+vt_ids use 0-based positions. This script converts back to match vt_ids when
+looking up scores.
 
 Usage:
-    conda run -n ppi python src/analysis/parse_mutpred2_vcfp_supplement.py \\
+    conda run -n ppi python src/analysis/import_mutpred2_vcfp_scores.py \\
         --csv mutpred2_vc1pcava_output.csv
 """
 from __future__ import annotations
 
 import argparse
-import numpy as np
+import sys
 from pathlib import Path
+
+import numpy as np
+
+_ANALYSIS_DIR = Path(__file__).resolve().parent  # src/analysis
+sys.path.insert(0, str(_ANALYSIS_DIR))
+
+from merge_vc1pcava_into_main import merge_method              # noqa: E402
+from restratify_vcfp_blind_test import restratify_one_method   # noqa: E402
 
 _EVAL = Path("/data/ross/ppi_lossgain/interaction_loss/publication/results/varchamp_seqcnf_newvar_eval")
 _FULL_METHOD = "MutPred-PPI (megascale_all, all-data) (varchamp_full_pooled)"
@@ -56,13 +67,13 @@ def mut_0based_to_1based(mut0: str) -> str:
     return f"{wt_aa}{pos0 + 1}{mut_aa}"
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--csv", required=True, help="MutPred2 output CSV file")
-    ap.add_argument("--dry-run", action="store_true")
-    args = ap.parse_args()
+def run(csv_path: Path, dry_run: bool = False) -> str | None:
+    """Parse the MutPred2 output CSV, save the vc1pcava supplement npy arrays,
+    then merge + restratify into the main MutPred2 VCFP arrays.
 
-    csv_path = Path(args.csv)
+    Returns _MP2_METHOD (the method description / key), or None if no
+    supplement entries were written (nothing to merge/restratify).
+    """
     print(f"Loading MutPred2 output: {csv_path}")
     mp2_scores = load_mutpred2_csv(csv_path)
     print(f"  {len(mp2_scores)} (protein, mutation) scores loaded")
@@ -82,16 +93,6 @@ def main() -> None:
     new_vt_ids = sorted(full_vt_ids - mp2_vt_ids)
     print(f"\nNew vc1pcava entries: {len(new_vt_ids)}")
 
-    # Load existing MutPred2 labels for each class to get the canonical C1/C2/C3 classification
-    canonical_class: dict[str, int] = {}
-    for c in [1, 2, 3]:
-        vf = _EVAL / f"{_MP2_METHOD}_c{c}_vt_ids.npy"
-        lf = _EVAL / f"{_MP2_METHOD}_c{c}_labels.npy"
-        vids = np.load(vf, allow_pickle=True)
-        labs = np.load(lf)
-        for vid, lab in zip(vids, labs):
-            canonical_class[vid] = c
-
     # Get canonical class for new entries from restratified MutPred-PPI arrays
     mp2_full_class: dict[str, int] = {}
     for c in [1, 2, 3]:
@@ -103,7 +104,7 @@ def main() -> None:
     # Build per-class predictions
     per_class: dict[int, list] = {c: [] for c in [1, 2, 3]}
 
-    # Also load labels from MutPred-PPI arrays (they share the same ground truth)
+    # Load labels from MutPred-PPI arrays (they share the same ground truth)
     mp2_full_labels: dict[str, int] = {}
     for c in [1, 2, 3]:
         vf = _EVAL / f"{_FULL_METHOD}_c{c}_vt_ids.npy"
@@ -133,10 +134,11 @@ def main() -> None:
         entries = per_class[c]
         print(f"  C{c}: {len(entries)} entries")
 
-    if args.dry_run:
+    if dry_run:
         print("\n[dry-run] Not writing files")
-        return
+        return None
 
+    any_saved = False
     for c in [1, 2, 3]:
         entries = per_class[c]
         if not entries:
@@ -152,8 +154,31 @@ def main() -> None:
         np.save(lf, labels)
         np.save(vf, vids)
         print(f"  C{c}: saved {len(preds)} entries → {pf.name}")
+        any_saved = True
 
-    print("\nDone. Next: run src/analysis/merge_vc1pcava_into_main.py")
+    return _MP2_METHOD if any_saved else None
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--csv", required=True, help="MutPred2 output CSV file")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="Parse/report only — skip writing files and skip merge/restratify.")
+    args = ap.parse_args()
+
+    method = run(Path(args.csv), dry_run=args.dry_run)
+
+    if method is None:
+        print("\nNo supplement entries written — skipping merge/restratify.")
+        return
+
+    print(f"\n=== Merging '{method}' vc1pcava supplement into main VCFP arrays ===")
+    merge_method(method, dry_run=args.dry_run)
+
+    print(f"\n=== Restratifying '{method}' C1/C2/C3 classification ===")
+    restratify_one_method(method, dry_run=args.dry_run)
+
+    print("\nDone.")
 
 
 if __name__ == "__main__":

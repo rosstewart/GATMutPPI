@@ -8,12 +8,12 @@ all hardcoded dataset paths.  This script only adds checkpoint saving and the
 Usage — 10-fold ensemble (Option A):
     conda run -n ppi python src/training/train_final_model.py \\
         --dataset sahni_fragoza --ablation megascale_all --seed 1 \\
-        --save-models-dir /path/to/models_sahni_fragoza/ --device cuda:0
+        --save-models-dir weights/folds/ --device cuda:0
 
 Usage — single model on all data (Option B):
     conda run -n ppi python src/training/train_final_model.py \\
         --dataset sahni_fragoza --ablation megascale_all --seed 1 \\
-        --save-models-dir /path/to/models_sahni_fragoza/ --device cuda:0 --no-cv
+        --save-models-dir weights/ --device cuda:0 --no-cv
 """
 
 from __future__ import annotations
@@ -46,9 +46,9 @@ from mutpred_ppi_cv import (  # noqa: E402
     GAT_mut_processor_no_gat,
     GAT_mut_processor_no_mut,
     _CV_DIR,
-    _SCALER_PATH,
+    _V1_0_SCALER_PATH,
     _MEGASCALE_SCALER_PATH,
-    _PRETRAINED_PATH,
+    _V1_0_PRETRAINED_PATH,
     _MEGASCALE_PRETRAINED_PATH,
 )
 
@@ -60,8 +60,8 @@ def _load_ckpt(path, mdl, device):
         raise FileNotFoundError(
             f"Checkpoint not found: {path}\n"
             "If this is the MegaScale pretrain checkpoint, either download it "
-            "into model_weights/ (see Zenodo, docs/DATA_SOURCES.md) or generate it "
-            "from scratch by running Phase 0 in docs/TRAINING.md "
+            "into weights/ (see Zenodo, docs/DATA_SOURCES.md) or generate it "
+            "from scratch: see 'Stability Pretraining' in docs/TRAINING.md "
             "(preprocess_stability_data.py + pretrain_stability.py)."
         )
     ckpt = torch.load(path, map_location=device)
@@ -84,7 +84,7 @@ def _build_model(ablation: str, input_dim: int, device: torch.device) -> nn.Modu
     else:
         model = GAT_mut_processor(input_dim=input_dim)
         if ablation in ("full", "full_all"):
-            _load_ckpt(_PRETRAINED_PATH, model, device)
+            _load_ckpt(_V1_0_PRETRAINED_PATH, model, device)
         elif ablation in ("megascale", "megascale_freeze_diff", "megascale_all",
                           "megascale_head", "megascale_all_wt-emb"):
             _load_ckpt(_MEGASCALE_PRETRAINED_PATH, model, device)
@@ -368,7 +368,7 @@ def run(args: argparse.Namespace) -> None:
     if args.ablation in _MEGASCALE_ABLATIONS:
         prefit_scaler = joblib.load(_MEGASCALE_SCALER_PATH)
     elif args.ablation != "scratch":
-        prefit_scaler = joblib.load(_SCALER_PATH)
+        prefit_scaler = joblib.load(_V1_0_SCALER_PATH)
 
     X             = ordered["prott5_embeddings"]
     edge_mats     = ordered["edge_mats"]

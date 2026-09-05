@@ -46,7 +46,12 @@ def get_models(model_dir, device):
     input_dim = 1024
 
     models = []
-    model_paths = glob.glob(f'{model_dir}/MutPred-PPI_*_megascale_all_*.pt')
+    primary = f'{model_dir}/MutPred-PPI.pt'
+    if glob.glob(primary):
+        model_paths = [primary]
+    else:
+        # Ensemble directory (e.g. per-fold checkpoints): load every matching file.
+        model_paths = glob.glob(f'{model_dir}/MutPred-PPI_*_megascale_all_*.pt')
 
     for model_path in model_paths:
         model = MutPred_PPI(input_dim=input_dim).to(device)
